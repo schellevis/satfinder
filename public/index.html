@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Satfinder</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d2e;
+      --surface2: #252840;
+      --border: #2e3155;
+      --accent: #4f8ef7;
+      --accent2: #7c5cbf;
+      --success: #2ecc71;
+      --warning: #f39c12;
+      --danger: #e74c3c;
+      --text: #e0e0f0;
+      --text2: #9098bb;
+      --radius: 8px;
+      --shadow: 0 2px 12px rgba(0,0,0,.4);
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 15px; }
+
+    /* Layout */
+    #app { display: flex; flex-direction: column; min-height: 100vh; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; box-shadow: var(--shadow); }
+    header h1 { font-size: 1.25rem; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+    header .version { font-size: .75rem; color: var(--text2); }
+    #weather-badge { margin-left: auto; font-size: .82rem; color: var(--text2); display: flex; align-items: center; gap: .4rem; }
+    #weather-badge span { color: var(--text); }
+
+    nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; overflow-x: auto; }
+    nav button { background: none; border: none; color: var(--text2); padding: .9rem 1.4rem; cursor: pointer; font-size: .9rem; white-space: nowrap; border-bottom: 3px solid transparent; transition: color .2s, border-color .2s; }
+    nav button:hover { color: var(--text); }
+    nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    main { flex: 1; padding: 1.5rem; max-width: 1200px; width: 100%; margin: 0 auto; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Cards */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
+    .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); display: flex; align-items: center; gap: .5rem; }
+    .card-title .badge { font-size: .7rem; padding: .15rem .45rem; border-radius: 20px; background: var(--accent2); color: #fff; }
+
+    /* Grid */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+
+    /* Forms */
+    .form-group { margin-bottom: .85rem; }
+    label { display: block; font-size: .82rem; color: var(--text2); margin-bottom: .3rem; }
+    input[type=text], input[type=number], input[type=password], input[type=url], select, textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
+      color: var(--text); padding: .5rem .75rem; font-size: .9rem; outline: none; transition: border-color .2s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { min-height: 80px; resize: vertical; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .5rem 1.1rem; border: none; border-radius: 5px; cursor: pointer; font-size: .875rem; font-weight: 500; transition: opacity .15s, transform .1s; }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: .85; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--accent); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-sm { padding: .3rem .7rem; font-size: .8rem; }
+
+    /* Signal meters */
+    .meter-group { display: flex; flex-direction: column; gap: .5rem; }
+    .meter-label { display: flex; justify-content: space-between; font-size: .82rem; color: var(--text2); }
+    .meter-bar { height: 18px; background: var(--surface2); border-radius: 20px; overflow: hidden; border: 1px solid var(--border); }
+    .meter-fill { height: 100%; border-radius: 20px; transition: width .4s ease, background-color .4s; background: linear-gradient(90deg, var(--success), #27ae60); }
+    .meter-fill.medium { background: linear-gradient(90deg, var(--warning), #e67e22); }
+    .meter-fill.low { background: linear-gradient(90deg, var(--danger), #c0392b); }
+
+    /* Lock indicator */
+    .lock-indicator { display: inline-flex; align-items: center; gap: .4rem; font-size: .9rem; font-weight: 600; padding: .35rem .75rem; border-radius: 20px; }
+    .lock-indicator.locked { background: rgba(46,204,113,.15); color: var(--success); border: 1px solid rgba(46,204,113,.3); }
+    .lock-indicator.unlocked { background: rgba(231,76,60,.15); color: var(--danger); border: 1px solid rgba(231,76,60,.3); }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    thead th { background: var(--surface2); color: var(--text2); font-weight: 600; padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: .55rem .8rem; }
+
+    /* Progress */
+    .progress-bar { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin-top: .3rem; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+
+    /* Status tags */
+    .tag { display: inline-block; font-size: .72rem; padding: .1rem .4rem; border-radius: 3px; font-weight: 600; }
+    .tag-success { background: rgba(46,204,113,.2); color: var(--success); }
+    .tag-warning { background: rgba(243,156,18,.2); color: var(--warning); }
+    .tag-danger { background: rgba(231,76,60,.2); color: var(--danger); }
+    .tag-info { background: rgba(79,142,247,.2); color: var(--accent); }
+
+    /* Alert */
+    .alert { padding: .75rem 1rem; border-radius: var(--radius); font-size: .875rem; margin-bottom: 1rem; }
+    .alert-info { background: rgba(79,142,247,.12); border: 1px solid rgba(79,142,247,.3); color: var(--accent); }
+    .alert-success { background: rgba(46,204,113,.12); border: 1px solid rgba(46,204,113,.3); color: var(--success); }
+    .alert-danger { background: rgba(231,76,60,.12); border: 1px solid rgba(231,76,60,.3); color: var(--danger); }
+
+    /* Chart */
+    .chart-container { position: relative; height: 260px; }
+
+    /* Toggle switch */
+    .toggle-wrap { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
+    .toggle { position: relative; width: 42px; height: 22px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 22px; transition: .3s; cursor: pointer; }
+    .toggle-slider::before { content: ''; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .3s; }
+    .toggle input:checked + .toggle-slider { background: var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    /* Spinner */
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      main { padding: 1rem .75rem; }
+      header { padding: 0 .75rem; }
+      nav button { padding: .75rem .9rem; }
+    }
+
+    .row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
+    .row .form-group { flex: 1; min-width: 140px; margin-bottom: 0; }
+    .section-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text2); margin-bottom: .75rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+    .mt-1 { margin-top: .5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .gap-1 { gap: .5rem; }
+    .flex { display: flex; }
+    .flex-wrap { flex-wrap: wrap; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .text-sm { font-size: .82rem; }
+    .text-muted { color: var(--text2); }
+    .font-mono { font-family: monospace; }
+    #toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: .5rem; }
+    .toast { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem 1.1rem; min-width: 220px; max-width: 360px; font-size: .875rem; box-shadow: var(--shadow); animation: slide-in .25s ease; }
+    .toast.success { border-left: 3px solid var(--success); }
+    .toast.error { border-left: 3px solid var(--danger); }
+    .toast.info { border-left: 3px solid var(--accent); }
+    @keyframes slide-in { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>📡 Satfinder</h1>
+    <span class="version">v1.0</span>
+    <div id="weather-badge">
+      <span id="weather-icon">🌡</span>
+      <span id="weather-text">Weer laden…</span>
+    </div>
+  </header>
+
+  <nav>
+    <button class="active" data-tab="tab-signal">📡 Signaalfinder</button>
+    <button data-tab="tab-tvh">📺 TVheadend</button>
+    <button data-tab="tab-history">📊 Geschiedenis</button>
+    <button data-tab="tab-settings">⚙️ Instellingen</button>
+  </nav>
+
+  <main>
+    <!-- TAB 1: Signal Finder -->
+    <div id="tab-signal" class="tab-panel active">
+      <div class="grid-2">
+        <div>
+          <div class="card">
+            <div class="card-title">SAT-IP Configuratie</div>
+            <div class="row">
+              <div class="form-group">
+                <label>SAT-IP Host</label>
+                <input type="text" id="si-host" placeholder="192.168.1.100" />
+              </div>
+              <div class="form-group" style="max-width:90px">
+                <label>Poort</label>
+                <input type="number" id="si-port" placeholder="554" value="554" />
+              </div>
+            </div>
+            <div class="mt-1 flex gap-1 flex-wrap">
+              <button class="btn btn-secondary btn-sm" onclick="discoverSatip()">🔍 Ontdek</button>
+            </div>
+            <div id="si-discover-result" class="mt-1 text-sm text-muted"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Transponder</div>
+            <div class="form-group">
+              <label>Satelliet</label>
+              <select id="si-satellite" onchange="filterTransponders()"></select>
+            </div>
+            <div class="form-group">
+              <label>Transponder</label>
+              <select id="si-transponder" onchange="fillTransponderFields()"></select>
+            </div>
+            <div class="section-title mt-2">Handmatig</div>
+            <div class="row">
+              <div class="form-group">
+                <label>Frequentie (MHz)</label>
+                <input type="number" id="si-freq" placeholder="10773" />
+              </div>
+              <div class="form-group" style="max-width:90px">
+                <label>Polarisatie</label>
+                <select id="si-pol">
+                  <option value="H">H</option>
+                  <option value="V">V</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="form-group">
+                <label>Symboolrate (ks/s)</label>
+                <input type="number" id="si-sr" placeholder="22000" />
+              </div>
+              <div class="form-group">
+                <label>Systeem</label>
+                <select id="si-msys">
+                  <option value="DVBS">DVB-S</option>
+                  <option value="DVBS2">DVB-S2</option>
+                </select>
+              </div>
+            </div>
+            <div class="mt-1 flex gap-1 flex-wrap items-center">
+              <button class="btn btn-primary" id="btn-measure" onclick="measureSignal()">📶 Meten</button>
+              <label class="toggle-wrap text-sm">
+                <span class="toggle"><input type="checkbox" id="si-auto-refresh" onchange="toggleAutoRefresh()" /><span class="toggle-slider"></span></span>
+                Auto-refresh
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="card-title">Signaalstatus</div>
+            <div id="si-lock-wrap" class="mb-1" style="margin-bottom:.75rem">
+              <span class="lock-indicator unlocked" id="si-lock">🔓 Geen lock</span>
+            </div>
+            <div class="meter-group">
+              <div>
+                <div class="meter-label"><span>Signaalsterkte</span><span id="si-level-val">—</span></div>
+                <div class="meter-bar"><div class="meter-fill" id="si-level-bar" style="width:0%"></div></div>
+              </div>
+              <div>
+                <div class="meter-label"><span>Signaalqualiteit</span><span id="si-quality-val">—</span></div>
+                <div class="meter-bar"><div class="meter-fill" id="si-quality-bar" style="width:0%"></div></div>
+              </div>
+            </div>
+            <div id="si-timestamp" class="text-muted text-sm mt-1" style="margin-top:.75rem"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Recente metingen <span class="badge" id="si-history-count">0</span></div>
+            <div class="table-wrap" style="max-height:260px;overflow-y:auto">
+              <table>
+                <thead><tr><th>Tijd</th><th>Freq</th><th>Niveau</th><th>Qual.</th><th>Lock</th></tr></thead>
+                <tbody id="si-history-body"><tr><td colspan="5" class="text-muted">Nog geen metingen</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: TVheadend -->
+    <div id="tab-tvh" class="tab-panel">
+      <div class="card">
+        <div class="card-title">TVheadend verbinding</div>
+        <div class="row">
+          <div class="form-group">
+            <label>TVheadend URL</label>
+            <input type="url" id="tvh-url" placeholder="http://192.168.1.101:9981" />
+          </div>
+          <div class="form-group" style="max-width:140px">
+            <label>Gebruikersnaam</label>
+            <input type="text" id="tvh-user" placeholder="admin" />
+          </div>
+          <div class="form-group" style="max-width:140px">
+            <label>Wachtwoord</label>
+            <input type="password" id="tvh-pass" placeholder="••••••" />
+          </div>
+          <div class="form-group" style="max-width:120px; align-self:flex-end">
+            <button class="btn btn-secondary" onclick="tvhSaveAndTest()">💾 Opslaan & test</button>
+          </div>
+        </div>
+        <div id="tvh-status" class="text-sm text-muted"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title justify-between flex items-center">
+            <span>Kanalenlijst</span>
+            <button class="btn btn-secondary btn-sm" onclick="loadTvhChannels()">🔄 Laden</button>
+          </div>
+          <div class="table-wrap" style="max-height:360px;overflow-y:auto">
+            <table>
+              <thead><tr><th>#</th><th>Naam</th><th>Actie</th></tr></thead>
+              <tbody id="tvh-channels-body"><tr><td colspan="3" class="text-muted">Klik op Laden</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Kanaalscan</div>
+          <p class="text-sm text-muted" style="margin-bottom:.75rem">Start een handmatige scan van alle actieve TVheadend tuner-ingangen.</p>
+          <button class="btn btn-primary" id="btn-tvh-scan" onclick="startTvhScan()">▶ Scan starten</button>
+          <div id="tvh-scan-progress" style="display:none" class="mt-1">
+            <div class="progress-bar"><div class="progress-fill" id="tvh-prog-fill" style="width:0%"></div></div>
+            <div id="tvh-prog-label" class="text-sm text-muted mt-1"></div>
+          </div>
+          <div id="tvh-scan-result" class="mt-1"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Actieve tuner-ingangen</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Input</th><th>Stream</th><th>Signaal %</th><th>SNR %</th><th>BER</th><th>UNC</th></tr></thead>
+            <tbody id="tvh-inputs-body"><tr><td colspan="6" class="text-muted">Nog niet geladen</td></tr></tbody>
+          </table>
+        </div>
+        <button class="btn btn-secondary btn-sm mt-1" style="margin-top:.5rem" onclick="loadTvhInputs()">🔄 Vernieuwen</button>
+      </div>
+    </div>
+
+    <!-- TAB 3: History -->
+    <div id="tab-history" class="tab-panel">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title justify-between flex items-center">
+            <span>Scan-geschiedenis</span>
+            <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Vernieuwen</button>
+          </div>
+          <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+            <table>
+              <thead><tr><th>ID</th><th>Type</th><th>Datum</th><th>Weer</th><th>Actie</th></tr></thead>
+              <tbody id="history-body"><tr><td colspan="5" class="text-muted">Laden…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" id="history-detail-card" style="display:none">
+          <div class="card-title">Scan details</div>
+          <div id="history-detail"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Signaalverloop over tijd</div>
+        <div class="row" style="margin-bottom:1rem">
+          <div class="form-group" style="max-width:220px">
+            <label>Frequentie (MHz)</label>
+            <select id="chart-freq-select" onchange="loadChartData()"></select>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="signal-chart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Signaalsterkte vs. weersomstandigheden</div>
+        <div class="chart-container">
+          <canvas id="weather-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: Settings -->
+    <div id="tab-settings" class="tab-panel">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">SAT-IP Server</div>
+          <div class="form-group">
+            <label>Host / IP-adres</label>
+            <input type="text" id="cfg-satip-host" placeholder="192.168.1.100" />
+          </div>
+          <div class="form-group">
+            <label>RTSP Poort</label>
+            <input type="number" id="cfg-satip-port" value="554" />
+          </div>
+          <div class="form-group">
+            <label>Tuner nummer</label>
+            <input type="number" id="cfg-satip-tuner" value="1" min="1" />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">TVheadend</div>
+          <div class="form-group">
+            <label>URL</label>
+            <input type="url" id="cfg-tvh-url" placeholder="http://192.168.1.101:9981" />
+          </div>
+          <div class="form-group">
+            <label>Gebruikersnaam</label>
+            <input type="text" id="cfg-tvh-user" />
+          </div>
+          <div class="form-group">
+            <label>Wachtwoord</label>
+            <input type="password" id="cfg-tvh-pass" placeholder="Ongewijzigd laten = '***'" />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Locatie (weerdata)</div>
+          <div class="form-group">
+            <label>Breedtegraad</label>
+            <input type="number" id="cfg-lat" step="0.0001" placeholder="52.3676" />
+          </div>
+          <div class="form-group">
+            <label>Lengtegraad</label>
+            <input type="number" id="cfg-lon" step="0.0001" placeholder="4.9041" />
+          </div>
+          <div class="form-group">
+            <label>Tijdzone</label>
+            <input type="text" id="cfg-tz" placeholder="Europe/Amsterdam" />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Nachtelijke scan</div>
+          <div class="form-group">
+            <label>Cron-expressie</label>
+            <input type="text" id="cfg-cron" placeholder="0 3 * * *" />
+          </div>
+          <div class="form-group">
+            <label class="toggle-wrap">
+              <span class="toggle"><input type="checkbox" id="cfg-scheduler-enabled" /><span class="toggle-slider"></span></span>
+              Automatische scan inschakelen
+            </label>
+          </div>
+          <div id="scheduler-status-text" class="text-sm text-muted"></div>
+        </div>
+      </div>
+
+      <div class="flex gap-1 flex-wrap">
+        <button class="btn btn-primary" onclick="saveSettings()">💾 Opslaan</button>
+        <button class="btn btn-secondary" onclick="loadSettings()">↩ Herladen</button>
+        <button class="btn btn-secondary" onclick="triggerScheduledScan()">▶ Scan nu uitvoeren</button>
+      </div>
+      <div id="settings-msg" class="mt-1"></div>
+    </div>
+  </main>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
