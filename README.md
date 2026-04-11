@@ -15,7 +15,6 @@ reception through **TVheadend**, and correlating signal quality with live **weat
 - 🌦 **Weather correlation** – signal measurements annotated with Open-Meteo weather (no API key)
 - 📊 **History & charts** – signal trend graphs powered by Chart.js
 - ⏰ **Nightly scheduler** – automated channel scan via configurable cron expression
-- 🔒 **Optional HTTP Basic Auth** for the web interface
 - 🐳 **Docker / Portainer ready** – single-image deployment with persistent volume
 
 ---
@@ -59,8 +58,7 @@ Copy `config.example.json` to `config.json` and adjust:
 {
   "server": {
     "port": 3000,
-    "host": "0.0.0.0",
-    "basicAuth": { "enabled": false, "username": "admin", "password": "changeme" }
+    "host": "0.0.0.0"
   },
   "satip": {
     "host": "192.168.1.100",
