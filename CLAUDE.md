@@ -44,7 +44,6 @@ npm run dev                           # hot-reload via nodemon
 |-----------------|----------------------------|----------------------|--------------------------------------------|
 | `server`        | `port`                     | `3000`               | HTTP listen port                           |
 | `server`        | `host`                     | `0.0.0.0`            | HTTP listen interface                      |
-| `server.basicAuth` | `enabled`               | `false`              | Enable HTTP Basic Auth for the UI          |
 | `satip`         | `host`                     | —                    | SAT-IP server IP address                   |
 | `satip`         | `port`                     | `554`                | SAT-IP RTSP port                           |
 | `satip`         | `tuner`                    | `1`                  | Tuner source index                         |

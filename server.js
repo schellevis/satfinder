@@ -32,33 +32,10 @@ function saveConfig(newConfig) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2), 'utf8');
 }
 
-// ---------- Basic auth middleware ----------
-
-function basicAuthMiddleware(req, res, next) {
-  const cfg = loadConfig();
-  const authCfg = (cfg.server || {}).basicAuth || {};
-  if (!authCfg.enabled) return next();
-
-  const authHeader = req.headers.authorization || '';
-  if (!authHeader.startsWith('Basic ')) {
-    res.setHeader('WWW-Authenticate', 'Basic realm="satfinder"');
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
-  const [user, ...passParts] = decoded.split(':');
-  const pass = passParts.join(':');
-  if (user === authCfg.username && pass === authCfg.password) {
-    return next();
-  }
-  res.setHeader('WWW-Authenticate', 'Basic realm="satfinder"');
-  return res.status(401).json({ error: 'Invalid credentials' });
-}
-
 // ---------- App setup ----------
 
 const app = express();
 app.use(express.json());
-app.use(basicAuthMiddleware);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------- Routes ----------
@@ -69,7 +46,6 @@ app.get('/api/config', (req, res) => {
   // Redact password fields before sending to client
   const safe = JSON.parse(JSON.stringify(cfg));
   if (safe.tvheadend) safe.tvheadend.password = safe.tvheadend.password ? '***' : '';
-  if (safe.server && safe.server.basicAuth) safe.server.basicAuth.password = safe.server.basicAuth.password ? '***' : '';
   res.json(safe);
 });
 
@@ -81,9 +57,6 @@ app.post('/api/config', (req, res) => {
     const merged = deepMerge(current, incoming);
     if (incoming.tvheadend && incoming.tvheadend.password === '***') {
       merged.tvheadend.password = current.tvheadend ? current.tvheadend.password : '';
-    }
-    if (incoming.server && incoming.server.basicAuth && incoming.server.basicAuth.password === '***') {
-      merged.server.basicAuth.password = current.server && current.server.basicAuth ? current.server.basicAuth.password : '';
     }
     saveConfig(merged);
     // Reload scheduler if scheduler config changed
