@@ -1,0 +1,45 @@
+# Satfinder – Docker Compose / Portainer stack
+#
+# Usage:
+#   docker compose up -d
+#
+# Portainer stack:
+#   Paste this file in Portainer > Stacks > Add stack > Web editor
+#   Set SATFINDER_DATA to a host path for persistent storage (default: ./data)
+#
+# The image is pulled from ghcr.io. To use a locally built image instead,
+# replace the `image:` line with `build: .`
+
+version: "3.9"
+
+services:
+  satfinder:
+    image: ghcr.io/schellevis/satfinder:latest
+    container_name: satfinder
+    restart: unless-stopped
+    ports:
+      - "${SATFINDER_PORT:-3000}:3000"
+    volumes:
+      # Persistent data directory (SQLite DB + optional config.json override)
+      - "${SATFINDER_DATA:-./data}:/data"
+      # Optional: supply a custom config.json (mount as read-only)
+      # - ./config.json:/app/config.json:ro
+    environment:
+      DB_PATH: /data/satfinder.db
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      # NODE_ENV is set to production inside the image
+    # Optional: run on the same Docker network as TVheadend / SAT-IP if needed
+    # networks:
+    #   - media
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/scheduler/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# Uncomment if you want a shared network with other media-server containers
+# networks:
+#   media:
+#     external: true
