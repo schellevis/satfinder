@@ -399,7 +399,7 @@ async function showScanDetail(id) {
     if (w) html += `<p class="text-sm text-muted mt-1">Temp: ${w.temperature}°C · Bewolking: ${w.cloud_cover}% · Neerslag: ${w.precipitation}mm</p>`;
 
     if (scan.signals && scan.signals.length) {
-      html += `<div class="section-title mt-2">Signaallmetingen (${scan.signals.length})</div>`;
+      html += `<div class="section-title mt-2">Signaalmetingen (${scan.signals.length})</div>`;
       html += `<div class="table-wrap"><table><thead><tr><th>Freq</th><th>Pol</th><th>Niveau</th><th>Qual.</th><th>Lock</th></tr></thead><tbody>`;
       for (const m of scan.signals) {
         html += `<tr><td>${m.frequency}</td><td>${m.polarisation}</td><td>${m.signal_level ?? '—'}%</td><td>${m.signal_quality ?? '—'}%</td><td>${m.locked ? '🔒' : '🔓'}</td></tr>`;

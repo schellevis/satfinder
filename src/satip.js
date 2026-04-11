@@ -67,7 +67,7 @@ function discover(timeoutMs = 3000) {
     setTimeout(() => {
       socket.close();
       resolve(servers);
-    }, timeoutMs);
+    }, safeTimeout);
   });
 }
 
