@@ -1,12 +1,10 @@
 # Satfinder
 
-[![Docker Image](https://ghcr.io/schellevis/satfinder)](https://github.com/schellevis/satfinder/pkgs/container/satfinder)
+[![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fschellevis%2Fsatfinder-blue?logo=docker)](https://github.com/schellevis/satfinder/pkgs/container/satfinder)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A self-hosted web application for fine-tuning a satellite dish via **SAT-IP**, monitoring channel
 reception through **TVheadend**, and correlating signal quality with live **weather data**.
-
-![Screenshot of the Satfinder UI – signal finder tab](https://raw.githubusercontent.com/schellevis/satfinder/main/docs/screenshot.png)
 
 ---
 

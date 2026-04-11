@@ -10,8 +10,6 @@
 # The image is pulled from ghcr.io. To use a locally built image instead,
 # replace the `image:` line with `build: .`
 
-version: "3.9"
-
 services:
   satfinder:
     image: ghcr.io/schellevis/satfinder:latest
