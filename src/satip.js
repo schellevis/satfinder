@@ -20,8 +20,12 @@ function nextCSeq() {
  * Discover SAT-IP servers on the local network via SSDP M-SEARCH.
  * Returns a list of discovered server objects within timeoutMs.
  */
+const MAX_DISCOVER_TIMEOUT = 30000;
+
 function discover(timeoutMs = 3000) {
+  const safeTimeout = Math.min(Math.max(500, Number(timeoutMs) || 3000), MAX_DISCOVER_TIMEOUT);
   return new Promise((resolve) => {
+    timeoutMs = safeTimeout;
     const servers = [];
     const seen = new Set();
     const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
@@ -163,10 +167,9 @@ async function tune(host, port, transponder) {
   const sessionHeader = resp.headers['session'] || '';
   const sessionId = sessionHeader.split(';')[0].trim();
 
-  // Send PLAY to activate tuning
-  const playUri = uri.replace('?', `/stream=${sessionId}?`).replace(`/stream=${sessionId}?src=`, '/stream=');
-  // Use the control URI from the SETUP response if present
-  const contentBase = resp.headers['content-base'] || uri;
+  // Use the content-base from SETUP response as the session control URI, falling back to building one
+  const contentBase = resp.headers['content-base'] ||
+    `rtsp://${host}:${port}/stream=${encodeURIComponent(sessionId)}`;
   await rtspRequest(host, port, 'PLAY', contentBase, { Session: sessionId });
 
   activeSessions.set(sessionId, { host, port, uri: contentBase, tuner: transponder.tuner || 1 });

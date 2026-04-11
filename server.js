@@ -99,7 +99,7 @@ app.post('/api/config', (req, res) => {
 // SAT-IP
 app.get('/api/satip/discover', async (req, res) => {
   try {
-    const timeout = parseInt(req.query.timeout, 10) || 3000;
+    const timeout = Math.min(Math.max(500, parseInt(req.query.timeout, 10) || 3000), 30000);
     const servers = await satip.discover(timeout);
     res.json({ servers });
   } catch (err) {
