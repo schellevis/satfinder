@@ -147,6 +147,62 @@ app.get('/api/satip/signal', async (req, res) => {
   }
 });
 
+// SAT-IP live session: tune once, poll signal without full tune/teardown per sample
+app.post('/api/satip/tune-session', async (req, res) => {
+  try {
+    const cfg = loadConfig();
+    const satipCfg = cfg.satip || {};
+    const host = req.body.host || satipCfg.host;
+    const port = parseInt(req.body.port, 10) || satipCfg.port || 554;
+    if (!host) return res.status(400).json({ error: 'SAT-IP host not configured' });
+
+    const transponder = {
+      frequency: req.body.frequency,
+      polarisation: req.body.polarisation || 'H',
+      symbol_rate: req.body.symbol_rate || 22000,
+      delivery_system: req.body.delivery_system || 'DVBS2',
+      fec: req.body.fec || null,
+      tuner: req.body.tuner || satipCfg.tuner || 1
+    };
+    if (!transponder.frequency) return res.status(400).json({ error: 'frequency required' });
+
+    const sessionId = await satip.tune(host, port, transponder);
+    res.json({ sessionId, host, port });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fast signal poll on existing live session (no tune overhead)
+app.get('/api/satip/signal-live', async (req, res) => {
+  const { sessionId } = req.query;
+  if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+
+  const session = satip.activeSessions.get(sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not found or expired' });
+
+  try {
+    const signal = await satip.getSignal(session.host, session.port, sessionId);
+    res.json(signal);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tear down a live session
+app.delete('/api/satip/tune-session/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  const session = satip.activeSessions.get(sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  try {
+    await satip.teardown(session.host, session.port, sessionId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Frequencies
 app.get('/api/frequencies', (req, res) => {
   const { satellite } = req.query;
@@ -177,7 +233,8 @@ app.get('/api/tvheadend/status', async (req, res) => {
   }
 });
 
-app.post('/api/tvheadend/scan', async (req, res) => {
+// Renamed from /api/tvheadend/scan: samples currently active inputs (not a real mux scan)
+app.post('/api/tvheadend/sample', async (req, res) => {
   try {
     const cfg = loadConfig();
     const tvCfg = cfg.tvheadend || {};
@@ -186,7 +243,7 @@ app.post('/api/tvheadend/scan', async (req, res) => {
     try { weatherData = await weather.getCurrentWeather(); } catch {}
 
     const scanId = db.startScan('manual', weatherData);
-    const measurements = await tvheadend.scanChannels(tvCfg);
+    const measurements = await tvheadend.sampleInputs(tvCfg);
     for (const m of measurements) {
       db.insertChannelMeasurement(scanId, m);
     }
@@ -226,6 +283,27 @@ app.get('/api/scans/:id', (req, res) => {
     const scan = db.getScanById(parseInt(req.params.id, 10));
     if (!scan) return res.status(404).json({ error: 'Scan not found' });
     res.json(scan);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Frequencies that actually have measurements (for the chart dropdown)
+app.get('/api/history/frequencies', (req, res) => {
+  try {
+    const freqs = db.getFrequenciesWithData();
+    res.json({ frequencies: freqs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Signal vs weather correlation data
+app.get('/api/history/correlation', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const data = db.getSignalWeatherCorrelation(limit);
+    res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -294,14 +372,19 @@ app.listen(PORT, HOST, () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+async function shutdown() {
+  // Tear down any active RTSP sessions (best-effort, max 3 s)
+  const teardowns = [];
+  for (const [sessionId, session] of satip.activeSessions) {
+    teardowns.push(satip.teardown(session.host, session.port, sessionId).catch(() => {}));
+  }
+  if (teardowns.length) {
+    await Promise.race([Promise.all(teardowns), new Promise(r => setTimeout(r, 3000))]);
+  }
   scheduler.stop();
   db.close();
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', () => {
-  scheduler.stop();
-  db.close();
-  process.exit(0);
-});
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

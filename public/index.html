@@ -234,9 +234,11 @@
             </div>
             <div class="mt-1 flex gap-1 flex-wrap items-center">
               <button class="btn btn-primary" id="btn-measure" onclick="measureSignal()">📶 Meten</button>
+              <button class="btn btn-success" id="btn-live-start" onclick="startLiveSession()">▶ Live peaken</button>
+              <button class="btn btn-danger" id="btn-live-stop" onclick="stopLiveSession()" style="display:none">⏹ Stoppen</button>
               <label class="toggle-wrap text-sm">
-                <span class="toggle"><input type="checkbox" id="si-auto-refresh" onchange="toggleAutoRefresh()" /><span class="toggle-slider"></span></span>
-                Auto-refresh
+                <span class="toggle"><input type="checkbox" id="si-audio-enabled" /><span class="toggle-slider"></span></span>
+                Audiofeedback
               </label>
             </div>
           </div>
@@ -313,9 +315,9 @@
         </div>
 
         <div class="card">
-          <div class="card-title">Kanaalscan</div>
-          <p class="text-sm text-muted" style="margin-bottom:.75rem">Start een handmatige scan van alle actieve TVheadend tuner-ingangen.</p>
-          <button class="btn btn-primary" id="btn-tvh-scan" onclick="startTvhScan()">▶ Scan starten</button>
+          <div class="card-title">Tuner-status vastleggen</div>
+          <p class="text-sm text-muted" style="margin-bottom:.75rem">Legt een snapshot vast van alle TVheadend tuner-ingangen die op dit moment actief zijn.</p>
+          <button class="btn btn-primary" id="btn-tvh-scan" onclick="startTvhScan()">📸 Status vastleggen</button>
           <div id="tvh-scan-progress" style="display:none" class="mt-1">
             <div class="progress-bar"><div class="progress-fill" id="tvh-prog-fill" style="width:0%"></div></div>
             <div id="tvh-prog-label" class="text-sm text-muted mt-1"></div>

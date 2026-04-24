@@ -117,10 +117,11 @@ async function getMuxes(options = {}) {
 }
 
 /**
- * Perform a TVheadend channel scan by sampling all active inputs.
- * Returns array of measurement objects.
+ * Sample all currently active TVheadend tuner inputs.
+ * Returns signal measurements for whatever is playing at call time.
+ * Note: at 3 AM nothing may be playing; use satip.measureSignal for scheduled history.
  */
-async function scanChannels(options = {}) {
+async function sampleInputs(options = {}) {
   const inputs = await getInputStatus(options);
   const channels = await getChannels(options);
   const now = new Date().toISOString();
@@ -135,7 +136,8 @@ async function scanChannels(options = {}) {
     const signalPct = normalizeSignal(inp.signal, inp.signal_scale);
     const snrPct = normalizeSignal(inp.snr, inp.snr_scale);
     return {
-      channel_id: inp.uuid || inp.stream || null,
+      // /api/status/inputs has no uuid field; use tuner name as stable id
+      channel_id: inp.input || null,
       channel_name: inp.stream || null,
       signal_level: signalPct,
       signal_quality: snrPct,
@@ -150,8 +152,8 @@ async function scanChannels(options = {}) {
 
 function normalizeSignal(value, scale) {
   if (value == null) return null;
-  // scale: 1 = relative (0-100%), 2 = absolute dBm * 1000, 3 = dB * 1000
-  if (scale === 1) return Math.min(100, Math.max(0, Math.round(value / 1000)));
+  // scale: 1 = relative (0–65535 promille), 2 = absolute dBm * 1000, 3 = dB * 1000
+  if (scale === 1) return Math.min(100, Math.max(0, Math.round(value / 655.35)));
   if (scale === 2 || scale === 3) {
     // Map typical dBm range -100..-30 to 0..100
     const dbm = value / 1000;
@@ -176,6 +178,6 @@ module.exports = {
   getChannels,
   getInputStatus,
   getMuxes,
-  scanChannels,
+  sampleInputs,
   ping
 };

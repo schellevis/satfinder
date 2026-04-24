@@ -10,11 +10,6 @@ const RTSP_DEFAULT_PORT = 554;
 
 // Active RTSP sessions keyed by session id
 const activeSessions = new Map();
-let cseq = 1;
-
-function nextCSeq() {
-  return cseq++;
-}
 
 /**
  * Discover SAT-IP servers on the local network via SSDP M-SEARCH.
@@ -76,16 +71,22 @@ function discover(timeoutMs = 3000) {
  */
 function rtspRequest(host, port, method, uri, headers = {}, body = '') {
   return new Promise((resolve, reject) => {
+    let resolved = false;
+    let buf = '';
+
     const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
       client.destroy();
       reject(new Error(`RTSP ${method} timed out`));
     }, 10000);
 
     const client = net.createConnection({ host, port }, () => {
-      const seq = nextCSeq();
+      // Each request opens a fresh TCP connection so CSeq always starts at 1.
+      // (Sessions with persistent connections will need per-session tracking.)
       const lines = [
         `${method} ${uri} RTSP/1.0`,
-        `CSeq: ${seq}`,
+        'CSeq: 1',
         'User-Agent: satfinder/1.0',
         ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`)
       ];
@@ -100,18 +101,41 @@ function rtspRequest(host, port, method, uri, headers = {}, body = '') {
       client.write(lines.join('\r\n'));
     });
 
-    let buf = '';
-    client.on('data', (chunk) => {
-      buf += chunk.toString('utf8');
-      // Wait until we have headers + possible body
-      if (buf.includes('\r\n\r\n')) {
+    function tryResolve() {
+      if (resolved) return;
+      const headerEnd = buf.indexOf('\r\n\r\n');
+      if (headerEnd === -1) return;
+
+      // Parse Content-Length so we wait for the full body before resolving.
+      // Without this, GET_PARAMETER and DESCRIBE responses arriving in two TCP
+      // chunks would be resolved with a truncated body.
+      const clMatch = buf.slice(0, headerEnd).match(/Content-Length:\s*(\d+)/i);
+      const contentLength = clMatch ? parseInt(clMatch[1], 10) : 0;
+
+      if (buf.length >= headerEnd + 4 + contentLength) {
+        resolved = true;
         clearTimeout(timeout);
         client.destroy();
         resolve(parseRtspResponse(buf));
       }
+    }
+
+    client.on('data', (chunk) => {
+      buf += chunk.toString('utf8');
+      tryResolve();
+    });
+
+    // FIN from server — resolve with whatever we have (no Content-Length case)
+    client.on('end', () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      resolve(parseRtspResponse(buf));
     });
 
     client.on('error', (err) => {
+      if (resolved) return;
+      resolved = true;
       clearTimeout(timeout);
       reject(err);
     });
@@ -203,9 +227,19 @@ function parseSignalBody(body) {
   for (const line of lines) {
     const [key, val] = line.split(':').map(s => s.trim());
     if (!key || !val) continue;
-    if (key === 'tuner_signal') result.level = parseInt(val, 10) || 0;
-    else if (key === 'tuner_quality') result.quality = parseInt(val, 10) || 0;
-    else if (key === 'tuner_lock') result.locked = val === '1' || val.toLowerCase() === 'true';
+    if (key === 'tuner_signal') {
+      // SAT-IP spec: 0–255 raw value
+      const raw = parseInt(val, 10) || 0;
+      result.level = Math.round(raw / 255 * 100);
+      result.level_raw = raw;
+    } else if (key === 'tuner_quality') {
+      // SAT-IP spec: 0–15 raw value
+      const raw = parseInt(val, 10) || 0;
+      result.quality = Math.round(raw / 15 * 100);
+      result.quality_raw = raw;
+    } else if (key === 'tuner_lock') {
+      result.locked = val === '1' || val.toLowerCase() === 'true';
+    }
   }
   return result;
 }

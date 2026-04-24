@@ -4,11 +4,16 @@
 const state = {
   frequencies: [],
   satellites: [],
-  autoRefreshTimer: null,
   signalHistory: [],
   signalChart: null,
   weatherChart: null,
-  currentScanId: null
+  currentScanId: null,
+  // Live session state
+  liveSessionId: null,
+  livePollingTimer: null,
+  audioCtx: null,
+  oscillator: null,
+  gainNode: null
 };
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
@@ -145,9 +150,17 @@ async function discoverSatip() {
     if (!data.servers || data.servers.length === 0) {
       el.textContent = 'Geen SAT-IP servers gevonden.';
     } else {
-      el.innerHTML = data.servers.map(s =>
-        `<div class="tag tag-success" style="margin:.2rem .2rem 0 0;cursor:pointer" onclick="document.getElementById('si-host').value='${s.address}'">${s.address}</div>`
-      ).join('');
+      // Build elements with DOM API to avoid XSS — s.address comes from a LAN
+      // SSDP packet and could contain malicious HTML if a rogue device replies.
+      el.replaceChildren();
+      for (const s of data.servers) {
+        const div = document.createElement('div');
+        div.className = 'tag tag-success';
+        div.style.cssText = 'margin:.2rem .2rem 0 0;cursor:pointer';
+        div.textContent = s.address;
+        div.addEventListener('click', () => { document.getElementById('si-host').value = s.address; });
+        el.appendChild(div);
+      }
       if (data.servers[0]) document.getElementById('si-host').value = data.servers[0].address;
     }
   } catch (e) {
@@ -224,14 +237,100 @@ function renderSignalHistory() {
   `).join('');
 }
 
-function toggleAutoRefresh() {
-  const enabled = document.getElementById('si-auto-refresh').checked;
-  if (enabled) {
-    state.autoRefreshTimer = setInterval(measureSignal, 5000);
-  } else {
-    clearInterval(state.autoRefreshTimer);
-    state.autoRefreshTimer = null;
+// ─── Live session (dish alignment mode) ──────────────────────────────────────
+async function startLiveSession() {
+  const host = document.getElementById('si-host').value.trim();
+  const port = document.getElementById('si-port').value || '554';
+  const freq = document.getElementById('si-freq').value;
+  const pol  = document.getElementById('si-pol').value;
+  const sr   = document.getElementById('si-sr').value || '22000';
+  const msys = document.getElementById('si-msys').value;
+
+  if (!host) { toast('Voer een SAT-IP host in', 'error'); return; }
+  if (!freq) { toast('Voer een frequentie in', 'error'); return; }
+
+  const btnStart = document.getElementById('btn-live-start');
+  const btnStop  = document.getElementById('btn-live-stop');
+  btnStart.disabled = true;
+
+  try {
+    const data = await api('/api/satip/tune-session', {
+      method: 'POST',
+      body: { host, port: parseInt(port, 10), frequency: parseInt(freq, 10),
+              polarisation: pol, symbol_rate: parseInt(sr, 10), delivery_system: msys }
+    });
+    state.liveSessionId = data.sessionId;
+    btnStart.style.display = 'none';
+    btnStop.style.display  = 'inline-flex';
+    state.livePollingTimer = setInterval(pollLiveSignal, 500);
+    toast('Live sessie gestart', 'success');
+  } catch (e) {
+    toast('Sessie starten mislukt: ' + e.message, 'error');
+    btnStart.disabled = false;
   }
+}
+
+async function stopLiveSession() {
+  if (state.livePollingTimer) {
+    clearInterval(state.livePollingTimer);
+    state.livePollingTimer = null;
+  }
+  stopAudio();
+  if (state.liveSessionId) {
+    try {
+      await api(`/api/satip/tune-session/${encodeURIComponent(state.liveSessionId)}`, { method: 'DELETE' });
+    } catch {}
+    state.liveSessionId = null;
+  }
+  const btnStart = document.getElementById('btn-live-start');
+  const btnStop  = document.getElementById('btn-live-stop');
+  btnStart.style.display   = 'inline-flex';
+  btnStart.disabled        = false;
+  btnStop.style.display    = 'none';
+  toast('Live sessie gestopt', 'info');
+}
+
+async function pollLiveSignal() {
+  if (!state.liveSessionId) return;
+  try {
+    const data = await api(`/api/satip/signal-live?sessionId=${encodeURIComponent(state.liveSessionId)}`);
+    updateSignalDisplay(data, document.getElementById('si-freq').value);
+    if (document.getElementById('si-audio-enabled').checked) {
+      playAudioFeedback(data.quality);
+    }
+  } catch (e) {
+    if (e.message.includes('not found') || e.message.includes('404')) {
+      await stopLiveSession();
+      toast('Sessie verlopen', 'error');
+    }
+  }
+}
+
+// ─── Audio feedback ───────────────────────────────────────────────────────────
+function playAudioFeedback(qualityPct) {
+  try {
+    if (!state.audioCtx) {
+      state.audioCtx = new AudioContext();
+      state.gainNode = state.audioCtx.createGain();
+      state.gainNode.gain.value = 0.08;
+      state.gainNode.connect(state.audioCtx.destination);
+      state.oscillator = state.audioCtx.createOscillator();
+      state.oscillator.type = 'sine';
+      state.oscillator.connect(state.gainNode);
+      state.oscillator.start();
+    }
+    // Map 0–100% quality to 220–2200 Hz
+    const freq = 220 + (qualityPct / 100) * 1980;
+    state.oscillator.frequency.setTargetAtTime(freq, state.audioCtx.currentTime, 0.05);
+  } catch {}
+}
+
+function stopAudio() {
+  try {
+    if (state.oscillator) { state.oscillator.stop(); state.oscillator = null; }
+    if (state.audioCtx)   { state.audioCtx.close();  state.audioCtx   = null; }
+    state.gainNode = null;
+  } catch {}
 }
 
 // ─── TAB 2: TVheadend ─────────────────────────────────────────────────────────
@@ -335,17 +434,17 @@ async function startTvhScan() {
   try {
     fill.style.width = '40%';
     label.textContent = 'Kanaaldata ophalen…';
-    const data = await api('/api/tvheadend/scan', { method: 'POST', body: {} });
+    const data = await api('/api/tvheadend/sample', { method: 'POST', body: {} });
     fill.style.width = '100%';
     label.textContent = `Klaar — ${data.measurements} metingen opgeslagen (scan #${data.scanId})`;
-    result.innerHTML = `<div class="alert alert-success">✓ Scan #${data.scanId} voltooid met ${data.measurements} metingen.</div>`;
-    toast('TVheadend scan voltooid', 'success');
+    result.innerHTML = `<div class="alert alert-success">✓ Snapshot #${data.scanId} voltooid met ${data.measurements} metingen.</div>`;
+    toast('Tuner-status vastgelegd', 'success');
   } catch (e) {
     fill.style.width = '100%';
     fill.style.background = 'var(--danger)';
     label.textContent = 'Fout: ' + e.message;
     result.innerHTML = `<div class="alert alert-danger">✗ ${e.message}</div>`;
-    toast('Scan mislukt: ' + e.message, 'error');
+    toast('Vastleggen mislukt: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
     setTimeout(() => {
@@ -380,8 +479,8 @@ async function loadHistory() {
         </tr>
       `;
     }).join('');
-    populateFreqSelector(scans);
-    buildWeatherCorrelationChart(scans);
+    populateFreqSelector();
+    buildWeatherCorrelationChart();
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-muted">Fout: ${e.message}</td></tr>`;
   }
@@ -422,11 +521,18 @@ async function showScanDetail(id) {
   }
 }
 
-function populateFreqSelector(scans) {
+async function populateFreqSelector() {
   const sel = document.getElementById('chart-freq-select');
-  const freqs = [...new Set(state.frequencies.map(f => f.frequency))];
-  sel.innerHTML = freqs.map(f => `<option value="${f}">${f} MHz</option>`).join('');
-  if (freqs.length) loadChartData();
+  try {
+    const data = await api('/api/history/frequencies');
+    const freqs = data.frequencies || [];
+    sel.innerHTML = freqs.length
+      ? freqs.map(f => `<option value="${f}">${f} MHz</option>`).join('')
+      : '<option value="">— Geen metingen —</option>';
+    if (freqs.length) loadChartData();
+  } catch {
+    sel.innerHTML = '<option value="">— Fout bij laden —</option>';
+  }
 }
 
 async function loadChartData() {
@@ -467,38 +573,64 @@ function buildSignalChart(history) {
   });
 }
 
-function buildWeatherCorrelationChart(scans) {
-  const points = scans
-    .filter(s => s.weather_data)
-    .map(s => {
-      const w = JSON.parse(s.weather_data);
-      return { cloud: w.cloud_cover, precip: w.precipitation };
-    })
-    .filter(p => p.cloud != null);
+async function buildWeatherCorrelationChart() {
+  try {
+    const { data } = await api('/api/history/correlation?limit=100');
+    if (!data || !data.length) return;
 
-  if (!points.length) return;
+    const points = data.reverse().map(row => {
+      const w = row.weather_data ? JSON.parse(row.weather_data) : {};
+      return {
+        label: fmt(row.started_at),
+        cloud: w.cloud_cover ?? null,
+        precip: w.precipitation ?? 0,
+        quality: row.avg_quality,
+        level: row.avg_level
+      };
+    }).filter(p => p.cloud != null && p.quality != null);
 
-  const ctx = document.getElementById('weather-chart').getContext('2d');
-  if (state.weatherChart) state.weatherChart.destroy();
-  state.weatherChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: points.map((_, i) => `Scan ${i + 1}`),
-      datasets: [
-        { label: 'Bewolking %', data: points.map(p => p.cloud), backgroundColor: 'rgba(79,142,247,.6)', borderColor: '#4f8ef7', borderWidth: 1 },
-        { label: 'Neerslag mm', data: points.map(p => p.precip || 0), backgroundColor: 'rgba(124,92,191,.6)', borderColor: '#7c5cbf', borderWidth: 1, yAxisID: 'y1' }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: {
-        y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#9098bb' } },
-        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#9098bb' } },
-        x: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#9098bb', maxTicksLimit: 15 } }
+    if (!points.length) return;
+
+    const ctx = document.getElementById('weather-chart').getContext('2d');
+    if (state.weatherChart) state.weatherChart.destroy();
+    state.weatherChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: points.map(p => p.label),
+        datasets: [
+          {
+            label: 'Gem. signaalqualiteit %',
+            data: points.map(p => p.quality),
+            borderColor: '#2ecc71', backgroundColor: 'rgba(46,204,113,.1)',
+            tension: .3, fill: true, pointRadius: 3, yAxisID: 'y'
+          },
+          {
+            label: 'Bewolking %',
+            data: points.map(p => p.cloud),
+            borderColor: '#4f8ef7', backgroundColor: 'rgba(79,142,247,.08)',
+            tension: .3, fill: false, pointRadius: 3, yAxisID: 'y', borderDash: [4, 3]
+          },
+          {
+            label: 'Neerslag mm',
+            data: points.map(p => p.precip),
+            borderColor: '#7c5cbf', backgroundColor: 'rgba(124,92,191,.3)',
+            type: 'bar', yAxisID: 'y1'
+          }
+        ]
       },
-      plugins: { legend: { labels: { color: '#e0e0f0' } } }
-    }
-  });
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          y:  { min: 0, max: 100, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#9098bb' } },
+          y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#9098bb' } },
+          x:  { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#9098bb', maxTicksLimit: 10 } }
+        },
+        plugins: { legend: { labels: { color: '#e0e0f0' } } }
+      }
+    });
+  } catch (e) {
+    console.warn('Weather correlation chart error:', e);
+  }
 }
 
 // ─── TAB 4: Settings ─────────────────────────────────────────────────────────

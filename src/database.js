@@ -152,6 +152,40 @@ function getSignalHistory(frequency, limit = 100) {
   `).all(frequency, limit);
 }
 
+/**
+ * Return distinct frequencies that have at least one signal measurement.
+ * Used to populate the history chart dropdown with only relevant frequencies.
+ */
+function getFrequenciesWithData() {
+  const db = getDb();
+  return db.prepare(
+    'SELECT DISTINCT frequency FROM signal_measurements WHERE frequency IS NOT NULL ORDER BY frequency'
+  ).all().map(r => r.frequency);
+}
+
+/**
+ * For each scan that has both weather data and signal measurements, return
+ * the average signal level/quality so we can plot signal vs. weather.
+ */
+function getSignalWeatherCorrelation(limit = 100) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT
+      s.id,
+      s.started_at,
+      s.weather_data,
+      ROUND(AVG(sm.signal_level), 1)   AS avg_level,
+      ROUND(AVG(sm.signal_quality), 1) AS avg_quality,
+      COUNT(sm.id)                     AS measurement_count
+    FROM scans s
+    JOIN signal_measurements sm ON sm.scan_id = s.id
+    WHERE s.weather_data IS NOT NULL
+    GROUP BY s.id
+    ORDER BY s.started_at DESC
+    LIMIT ?
+  `).all(limit);
+}
+
 function close() {
   if (db) {
     db.close();
@@ -168,5 +202,7 @@ module.exports = {
   getScans,
   getScanById,
   getSignalHistory,
+  getFrequenciesWithData,
+  getSignalWeatherCorrelation,
   close
 };
