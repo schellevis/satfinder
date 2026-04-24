@@ -143,3 +143,4 @@ Alternatively a future local API endpoint can push transponders at runtime.
 - Frontend: zero npm dependencies – plain HTML5/CSS3/JS, Chart.js loaded from CDN.
 - Config passwords are never returned to the client (replaced with `***`).
 - Graceful shutdown on `SIGINT`/`SIGTERM`: scheduler stops, DB closes.
+- **Never hardcode** IP addresses, hostnames, coordinates, usernames, or other personally identifiable / environment-specific values. These must always come from `config.json` and be configurable by the user. Discuss with the user before introducing any new defaults.

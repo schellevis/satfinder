@@ -4,177 +4,533 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Satfinder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <style>
+    /* ── RESET ─────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── TOKENS ────────────────────────────────────────── */
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d2e;
-      --surface2: #252840;
-      --border: #2e3155;
-      --accent: #4f8ef7;
-      --accent2: #7c5cbf;
-      --success: #2ecc71;
-      --warning: #f39c12;
-      --danger: #e74c3c;
-      --text: #e0e0f0;
-      --text2: #9098bb;
-      --radius: 8px;
-      --shadow: 0 2px 12px rgba(0,0,0,.4);
+      --bg:         #f5f6fa;
+      --surface:    #ffffff;
+      --surface-2:  #f0f1f8;
+      --border:     #e5e8f0;
+      --text:       #1a1f35;
+      --text-muted: #8a93b0;
+      --accent:     #6366f1;
+      --accent-2:   #8b5cf6;
+      --success:    #059669;
+      --warning:    #f59e0b;
+      --danger:     #ef4444;
+      --shadow:     0 1px 4px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+      --radius:     10px;
+      --radius-sm:  6px;
     }
-    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 15px; }
+    [data-theme="dark"] {
+      --bg:         #0f1117;
+      --surface:    #1a1d2e;
+      --surface-2:  #232640;
+      --border:     #2d3048;
+      --text:       #e2e4f0;
+      --text-muted: #6b7a99;
+      --accent:     #818cf8;
+      --accent-2:   #a78bfa;
+      --success:    #34d399;
+      --warning:    #fbbf24;
+      --danger:     #f87171;
+      --shadow:     0 2px 12px rgba(0,0,0,.3);
+    }
 
-    /* Layout */
+    /* Theme toggle icons */
+    .icon-sun  { display: none; }
+    .icon-moon { display: block; }
+    [data-theme="dark"] .icon-sun  { display: block; }
+    [data-theme="dark"] .icon-moon { display: none; }
+
+    /* ── BASE ──────────────────────────────────────────── */
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
     #app { display: flex; flex-direction: column; min-height: 100vh; }
-    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; height: 56px; box-shadow: var(--shadow); }
-    header h1 { font-size: 1.25rem; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
-    header .version { font-size: .75rem; color: var(--text2); }
-    #weather-badge { margin-left: auto; font-size: .82rem; color: var(--text2); display: flex; align-items: center; gap: .4rem; }
-    #weather-badge span { color: var(--text); }
 
-    nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; overflow-x: auto; }
-    nav button { background: none; border: none; color: var(--text2); padding: .9rem 1.4rem; cursor: pointer; font-size: .9rem; white-space: nowrap; border-bottom: 3px solid transparent; transition: color .2s, border-color .2s; }
-    nav button:hover { color: var(--text); }
-    nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+    /* ── TOPBAR ────────────────────────────────────────── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      height: 52px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 8px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+    .logo { display: flex; align-items: center; gap: 8px; margin-right: 16px; flex-shrink: 0; }
+    .logo-mark {
+      width: 26px; height: 26px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; flex-shrink: 0;
+    }
+    .logo-name { font-size: .9rem; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
 
-    main { flex: 1; padding: 1.5rem; max-width: 1200px; width: 100%; margin: 0 auto; }
+    nav.nav-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }
+    .nav-tab {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      background: none; border: none; border-radius: var(--radius-sm);
+      color: var(--text-muted); font-size: .82rem; font-weight: 500;
+      cursor: pointer; transition: color .15s, background .15s;
+      white-space: nowrap; font-family: inherit;
+    }
+    .nav-tab:hover { color: var(--text); background: var(--surface-2); }
+    .nav-tab.active { background: rgba(99,102,241,.1); color: var(--accent); }
+    [data-theme="dark"] .nav-tab.active { background: rgba(129,140,248,.12); }
+
+    .weather-pill {
+      display: flex; align-items: center; gap: 5px;
+      font-size: .74rem; color: var(--text-muted);
+      padding: 4px 10px; border-radius: 99px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .weather-pill #weather-text { color: var(--text); }
+
+    .theme-toggle {
+      width: 32px; height: 32px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-2); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-muted);
+      transition: color .15s, background .15s; flex-shrink: 0;
+    }
+    .theme-toggle:hover { color: var(--text); background: var(--border); }
+
+    /* ── MAIN ──────────────────────────────────────────── */
+    main { flex: 1; padding: 24px 20px; max-width: 1120px; width: 100%; margin: 0 auto; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
-    /* Cards */
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
-    .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); display: flex; align-items: center; gap: .5rem; }
-    .card-title .badge { font-size: .7rem; padding: .15rem .45rem; border-radius: 20px; background: var(--accent2); color: #fff; }
+    /* ── STAT TILES ────────────────────────────────────── */
+    .stat-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+    .stat-tile {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow);
+    }
+    .stat-tile-label {
+      font-size: .65rem; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--text-muted); font-weight: 600; margin-bottom: 6px;
+    }
+    .stat-tile-value {
+      font-family: 'JetBrains Mono', monospace; font-size: 1.65rem;
+      font-weight: 500; color: var(--text); line-height: 1;
+      display: flex; align-items: baseline; gap: 3px;
+    }
+    .stat-unit { font-size: .75rem; color: var(--text-muted); }
 
-    /* Grid */
-    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
-    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    /* ── CARDS ─────────────────────────────────────────── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+      margin-bottom: 12px; box-shadow: var(--shadow);
+    }
+    .signal-status-card { min-height: 260px; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .card-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); font-weight: 600; }
+    .card-title { font-size: .9rem; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .card-title .badge { font-size: .68rem; padding: 2px 7px; border-radius: 99px; background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); }
 
-    /* Forms */
-    .form-group { margin-bottom: .85rem; }
-    label { display: block; font-size: .82rem; color: var(--text2); margin-bottom: .3rem; }
+    /* ── GRID ──────────────────────────────────────────── */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+
+    /* ── FORMS ─────────────────────────────────────────── */
+    .form-group { margin-bottom: 10px; }
+    label { display: block; font-size: .76rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 500; }
     input[type=text], input[type=number], input[type=password], input[type=url], select, textarea {
-      width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
-      color: var(--text); padding: .5rem .75rem; font-size: .9rem; outline: none; transition: border-color .2s;
+      width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text);
+      padding: 7px 10px; font-size: .875rem; outline: none;
+      transition: border-color .15s; font-family: inherit;
     }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
     textarea { min-height: 80px; resize: vertical; }
 
-    /* Buttons */
-    .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .5rem 1.1rem; border: none; border-radius: 5px; cursor: pointer; font-size: .875rem; font-weight: 500; transition: opacity .15s, transform .1s; }
+    /* ── BUTTONS ───────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border: 1px solid transparent;
+      border-radius: var(--radius-sm); cursor: pointer;
+      font-size: .82rem; font-weight: 500;
+      transition: opacity .15s, transform .1s;
+      font-family: inherit; line-height: 1;
+    }
     .btn:active { transform: scale(.97); }
-    .btn:disabled { opacity: .45; cursor: not-allowed; }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover:not(:disabled) { opacity: .85; }
-    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-    .btn-secondary:hover:not(:disabled) { border-color: var(--accent); }
-    .btn-success { background: var(--success); color: #fff; }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .btn-sm { padding: .3rem .7rem; font-size: .8rem; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary  { background: var(--accent);    color: #fff; border-color: var(--accent); }
+    .btn-primary:hover:not(:disabled)  { opacity: .88; }
+    .btn-secondary { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn-success  { background: var(--success);   color: #fff; border-color: var(--success); }
+    .btn-success:hover:not(:disabled)  { opacity: .9; }
+    .btn-danger   { background: var(--danger);    color: #fff; border-color: var(--danger); }
+    .btn-danger:hover:not(:disabled)   { opacity: .9; }
+    .btn-sm { padding: 5px 10px; font-size: .76rem; }
 
-    /* Signal meters */
-    .meter-group { display: flex; flex-direction: column; gap: .5rem; }
-    .meter-label { display: flex; justify-content: space-between; font-size: .82rem; color: var(--text2); }
-    .meter-bar { height: 18px; background: var(--surface2); border-radius: 20px; overflow: hidden; border: 1px solid var(--border); }
-    .meter-fill { height: 100%; border-radius: 20px; transition: width .4s ease, background-color .4s; background: linear-gradient(90deg, var(--success), #27ae60); }
-    .meter-fill.medium { background: linear-gradient(90deg, var(--warning), #e67e22); }
-    .meter-fill.low { background: linear-gradient(90deg, var(--danger), #c0392b); }
+    /* ── METERS ────────────────────────────────────────── */
+    .meter-group { display: flex; flex-direction: column; gap: 10px; }
+    .meter-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .meter-name  { font-size: .76rem; color: var(--text-muted); }
+    .meter-val   { font-family: 'JetBrains Mono', monospace; font-size: .8rem; color: var(--text); font-weight: 500; }
+    .meter-bar   { height: 10px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+    .meter-fill  { height: 100%; border-radius: 99px; transition: width .4s ease, background .4s; }
+    .meter-fill.high   { background: linear-gradient(90deg, #059669, #10b981); }
+    .meter-fill.medium { background: linear-gradient(90deg, #f59e0b, #f97316); }
+    .meter-fill.low    { background: linear-gradient(90deg, #ef4444, #dc2626); }
+    [data-theme="dark"] .meter-fill.high   { background: linear-gradient(90deg, #34d399, #6ee7b7); }
+    [data-theme="dark"] .meter-fill.medium { background: linear-gradient(90deg, #fbbf24, #fb923c); }
+    [data-theme="dark"] .meter-fill.low    { background: linear-gradient(90deg, #f87171, #fca5a5); }
 
-    /* Lock indicator */
-    .lock-indicator { display: inline-flex; align-items: center; gap: .4rem; font-size: .9rem; font-weight: 600; padding: .35rem .75rem; border-radius: 20px; }
-    .lock-indicator.locked { background: rgba(46,204,113,.15); color: var(--success); border: 1px solid rgba(46,204,113,.3); }
-    .lock-indicator.unlocked { background: rgba(231,76,60,.15); color: var(--danger); border: 1px solid rgba(231,76,60,.3); }
+    /* ── LOCK INDICATOR ────────────────────────────────── */
+    .lock-indicator {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: .8rem; font-weight: 600;
+      padding: 4px 10px; border-radius: 99px;
+    }
+    .lock-indicator.locked   { background: rgba(5,150,105,.1);  color: var(--success); border: 1px solid rgba(5,150,105,.2); }
+    .lock-indicator.unlocked { background: rgba(239,68,68,.1);  color: var(--danger);  border: 1px solid rgba(239,68,68,.2); }
+    [data-theme="dark"] .lock-indicator.locked   { background: rgba(52,211,153,.1);  border-color: rgba(52,211,153,.2); }
+    [data-theme="dark"] .lock-indicator.unlocked { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.2); }
 
-    /* Tables */
+    /* Lock icon visibility */
+    .si-lock-closed { display: none; }
+    .si-lock-open   { display: inline; }
+    #si-lock.locked   .si-lock-closed { display: inline; }
+    #si-lock.locked   .si-lock-open   { display: none; }
+    #si-lock.unlocked .si-lock-closed { display: none; }
+    #si-lock.unlocked .si-lock-open   { display: inline; }
+
+    /* Live pulse dot */
+    .live-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0;
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.6); } }
+
+    /* ── TABLES ────────────────────────────────────────── */
     .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-    thead th { background: var(--surface2); color: var(--text2); font-weight: 600; padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
-    tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
-    tbody tr:hover { background: var(--surface2); }
-    td { padding: .55rem .8rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    thead th {
+      background: var(--surface-2); color: var(--text-muted);
+      font-weight: 600; padding: 7px 10px; text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
+      position: sticky; top: 0; z-index: 1;
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
+    tbody tr:hover { background: var(--surface-2); }
+    td { padding: 8px 10px; }
 
-    /* Progress */
-    .progress-bar { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin-top: .3rem; }
-    .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+    /* ── TAGS ──────────────────────────────────────────── */
+    .tag { display: inline-block; font-size: .69rem; padding: 2px 7px; border-radius: 99px; font-weight: 600; }
+    .tag-success { background: rgba(5,150,105,.1);  color: var(--success); }
+    .tag-warning { background: rgba(245,158,11,.1); color: var(--warning); }
+    .tag-danger  { background: rgba(239,68,68,.1);  color: var(--danger); }
+    .tag-info    { background: rgba(99,102,241,.1); color: var(--accent); }
+    [data-theme="dark"] .tag-success { background: rgba(52,211,153,.1); }
+    [data-theme="dark"] .tag-warning { background: rgba(251,191,36,.1); }
+    [data-theme="dark"] .tag-danger  { background: rgba(248,113,113,.1); }
+    [data-theme="dark"] .tag-info    { background: rgba(129,140,248,.1); }
 
-    /* Status tags */
-    .tag { display: inline-block; font-size: .72rem; padding: .1rem .4rem; border-radius: 3px; font-weight: 600; }
-    .tag-success { background: rgba(46,204,113,.2); color: var(--success); }
-    .tag-warning { background: rgba(243,156,18,.2); color: var(--warning); }
-    .tag-danger { background: rgba(231,76,60,.2); color: var(--danger); }
-    .tag-info { background: rgba(79,142,247,.2); color: var(--accent); }
+    /* ── PROGRESS BAR ──────────────────────────────────── */
+    .progress-bar  { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
 
-    /* Alert */
-    .alert { padding: .75rem 1rem; border-radius: var(--radius); font-size: .875rem; margin-bottom: 1rem; }
-    .alert-info { background: rgba(79,142,247,.12); border: 1px solid rgba(79,142,247,.3); color: var(--accent); }
-    .alert-success { background: rgba(46,204,113,.12); border: 1px solid rgba(46,204,113,.3); color: var(--success); }
-    .alert-danger { background: rgba(231,76,60,.12); border: 1px solid rgba(231,76,60,.3); color: var(--danger); }
+    /* ── BAND SCAN ─────────────────────────────────────── */
+    .band-scan-card { padding: 22px 24px; }
+    .band-scan-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
+    }
+    .band-scan-copy { max-width: 720px; }
+    .band-scan-copy .card-title { font-size: 1rem; margin-bottom: 8px; }
+    .band-scan-actions { display: flex; align-items: center; gap: 8px; }
+    .band-scan-kpis {
+      display: grid; grid-template-columns: 1.3fr 1fr 1.2fr;
+      gap: 12px; margin: 14px 0;
+    }
+    .band-scan-kpi {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px;
+      min-height: 112px;
+    }
+    .band-scan-kpi-primary {
+      background: linear-gradient(135deg, rgba(99,102,241,.1), rgba(139,92,246,.08));
+      border-color: rgba(99,102,241,.2);
+    }
+    [data-theme="dark"] .band-scan-kpi-primary {
+      background: linear-gradient(135deg, rgba(129,140,248,.14), rgba(167,139,250,.08));
+      border-color: rgba(129,140,248,.2);
+    }
+    .band-scan-kpi-label {
+      font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--text-muted); font-weight: 700; margin-bottom: 10px;
+    }
+    .band-scan-kpi-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      line-height: .95; font-weight: 600; color: var(--text);
+      margin-bottom: 10px;
+    }
+    .band-scan-kpi-value-sm {
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.15;
+      word-break: break-word;
+    }
+    .band-scan-kpi-meta { font-size: .85rem; color: var(--text-muted); line-height: 1.35; }
+    .band-scan-progress { height: 10px; border-radius: 999px; margin-top: 0; }
+    .band-scan-progress .progress-fill {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-radius: 999px;
+    }
+    .band-scan-statusline {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 14px; flex-wrap: wrap; margin: 12px 0 14px;
+    }
+    .band-scan-statusline .text-strong { color: var(--text); font-weight: 600; }
+    .band-scan-table-wrap { max-height: 420px; overflow-y: auto; margin-top: 8px; }
+    .band-scan-table td:first-child { width: 42%; }
+    .band-row-current { background: rgba(99,102,241,.05); }
+    .band-row-current td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+    .band-row-current .tag-info { background: rgba(99,102,241,.16); }
+    .band-row-error td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+    .band-scan-secondary { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 
-    /* Chart */
-    .chart-container { position: relative; height: 260px; }
+    /* ── ALERTS ────────────────────────────────────────── */
+    .alert { padding: 10px 14px; border-radius: var(--radius-sm); font-size: .84rem; margin-bottom: 10px; }
+    .alert-info    { background: rgba(99,102,241,.07); border: 1px solid rgba(99,102,241,.2);  color: var(--accent); }
+    .alert-success { background: rgba(5,150,105,.07);  border: 1px solid rgba(5,150,105,.2);   color: var(--success); }
+    .alert-danger  { background: rgba(239,68,68,.07);  border: 1px solid rgba(239,68,68,.2);   color: var(--danger); }
+    [data-theme="dark"] .alert-info    { background: rgba(129,140,248,.07); border-color: rgba(129,140,248,.18); }
+    [data-theme="dark"] .alert-success { background: rgba(52,211,153,.07);  border-color: rgba(52,211,153,.18); }
+    [data-theme="dark"] .alert-danger  { background: rgba(248,113,113,.07); border-color: rgba(248,113,113,.18); }
 
-    /* Toggle switch */
-    .toggle-wrap { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
-    .toggle { position: relative; width: 42px; height: 22px; flex-shrink: 0; }
+    /* ── CHART ─────────────────────────────────────────── */
+    .chart-container { position: relative; height: 240px; }
+
+    /* ── TOGGLE SWITCH ─────────────────────────────────── */
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .82rem; color: var(--text); }
+    .toggle { position: relative; width: 38px; height: 20px; flex-shrink: 0; }
     .toggle input { opacity: 0; width: 0; height: 0; }
-    .toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 22px; transition: .3s; cursor: pointer; }
-    .toggle-slider::before { content: ''; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .3s; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 20px; transition: .25s; cursor: pointer; }
+    .toggle-slider::before { content: ''; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .25s; }
     .toggle input:checked + .toggle-slider { background: var(--accent); }
-    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
 
-    /* Spinner */
-    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+    /* ── SPINNER ───────────────────────────────────────── */
+    .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.25); border-top-color: currentColor; border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Responsive */
-    @media (max-width: 600px) {
-      main { padding: 1rem .75rem; }
-      header { padding: 0 .75rem; }
-      nav button { padding: .75rem .9rem; }
-    }
-
-    .row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
-    .row .form-group { flex: 1; min-width: 140px; margin-bottom: 0; }
-    .section-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text2); margin-bottom: .75rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
-    .mt-1 { margin-top: .5rem; }
-    .mt-2 { margin-top: 1rem; }
-    .gap-1 { gap: .5rem; }
+    /* ── UTILITIES ─────────────────────────────────────── */
+    .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .row .form-group { flex: 1; min-width: 120px; margin-bottom: 0; }
+    .section-title { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); font-weight: 600; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .mt-1 { margin-top: 6px; }
+    .mt-2 { margin-top: 12px; }
+    .gap-1 { gap: 6px; }
     .flex { display: flex; }
     .flex-wrap { flex-wrap: wrap; }
     .items-center { align-items: center; }
     .justify-between { justify-content: space-between; }
-    .text-sm { font-size: .82rem; }
-    .text-muted { color: var(--text2); }
-    .font-mono { font-family: monospace; }
-    #toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: .5rem; }
-    .toast { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem 1.1rem; min-width: 220px; max-width: 360px; font-size: .875rem; box-shadow: var(--shadow); animation: slide-in .25s ease; }
+    .text-sm { font-size: .8rem; }
+    .text-muted { color: var(--text-muted); }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .mb-1 { margin-bottom: 8px; }
+
+    /* ── TOAST ─────────────────────────────────────────── */
+    #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 6px; }
+    .toast {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 14px;
+      min-width: 200px; max-width: 340px; font-size: .82rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,.15); animation: slide-in .2s ease;
+    }
     .toast.success { border-left: 3px solid var(--success); }
-    .toast.error { border-left: 3px solid var(--danger); }
-    .toast.info { border-left: 3px solid var(--accent); }
-    @keyframes slide-in { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+    .toast.error   { border-left: 3px solid var(--danger); }
+    .toast.info    { border-left: 3px solid var(--accent); }
+    @keyframes slide-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+
+    /* ── RESPONSIVE ────────────────────────────────────── */
+    @media (max-width: 640px) {
+      main { padding: 16px 12px; }
+      .topbar { padding: 0 12px; }
+      .tab-label { display: none; }
+      .stat-tiles { grid-template-columns: 1fr; }
+      .band-scan-kpis { grid-template-columns: 1fr; }
+      .band-scan-card { padding: 18px; }
+    }
+    @media (max-width: 420px) {
+      .stat-tiles { grid-template-columns: repeat(3, 1fr); }
+      .stat-tile-value { font-size: 1.2rem; }
+    }
   </style>
 </head>
 <body>
 <div id="app">
-  <header>
-    <h1>📡 Satfinder</h1>
-    <span class="version">v1.0</span>
-    <div id="weather-badge">
-      <span id="weather-icon">🌡</span>
-      <span id="weather-text">Weer laden…</span>
+
+  <!-- ── TOPBAR ──────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="logo">
+      <div class="logo-mark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4.5 16.5c-1.5 1.5-1.5 2.5 0 4s2.5 1.5 4 0l6-6-4-4-6 6z"/>
+          <path d="M7 20L4 17M13.5 7.5l4 4"/>
+          <path d="M17 7a3 3 0 0 1-3 3M20 4a6 6 0 0 1-6 6"/>
+        </svg>
+      </div>
+      <span class="logo-name">Satfinder</span>
     </div>
+
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="tab-signal">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="2"/>
+          <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>
+        </svg>
+        <span class="tab-label">Signaalfinder</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-tvh">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+        <span class="tab-label">TVheadend</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-history">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 7 12 12 15 15"/>
+        </svg>
+        <span class="tab-label">Geschiedenis</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span class="tab-label">Instellingen</span>
+      </button>
+    </nav>
+
+    <div class="weather-pill">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/>
+      </svg>
+      <span id="weather-text">Laden…</span>
+    </div>
+
+    <button class="theme-toggle" onclick="toggleTheme()" title="Thema wisselen">
+      <svg class="icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      <svg class="icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
   </header>
 
-  <nav>
-    <button class="active" data-tab="tab-signal">📡 Signaalfinder</button>
-    <button data-tab="tab-tvh">📺 TVheadend</button>
-    <button data-tab="tab-history">📊 Geschiedenis</button>
-    <button data-tab="tab-settings">⚙️ Instellingen</button>
-  </nav>
-
   <main>
-    <!-- TAB 1: Signal Finder -->
+
+    <!-- ── TAB 1: SIGNAALFINDER ─────────────────────── -->
     <div id="tab-signal" class="tab-panel active">
+
+      <!-- Stat tiles -->
+      <div class="stat-tiles">
+        <div class="stat-tile">
+          <div class="stat-tile-label">Signaalsterkte</div>
+          <div class="stat-tile-value">
+            <span id="stat-level-val">—</span><span class="stat-unit" id="stat-level-unit"></span>
+          </div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Signaalqualiteit</div>
+          <div class="stat-tile-value">
+            <span id="stat-quality-val">—</span><span class="stat-unit" id="stat-quality-unit"></span>
+          </div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-label">Status</div>
+          <div class="stat-tile-value" style="font-size:1rem; align-items:center;">
+            <span id="stat-lock-val" style="font-family:'Inter',sans-serif; font-size:.88rem; color:var(--text-muted)">Geen meting</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card band-scan-card">
+        <div class="band-scan-head">
+          <div class="band-scan-copy">
+            <div class="card-title">
+              <span id="si-band-scan-title">Band-scan</span>
+              <span class="badge" id="si-band-scan-badge">0 TP</span>
+            </div>
+            <p class="text-sm text-muted">Loopt automatisch alle referentietransponders langs, toont live resultaten en slaat alles op als één scan.</p>
+          </div>
+          <div class="band-scan-actions">
+            <button class="btn btn-primary" id="btn-band-scan" onclick="startBandScan()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Band-scan
+            </button>
+          </div>
+        </div>
+
+        <div id="si-band-scan-msg"></div>
+
+        <div class="band-scan-kpis">
+          <div class="band-scan-kpi band-scan-kpi-primary">
+            <div class="band-scan-kpi-label">Lock Score</div>
+            <div class="band-scan-kpi-value" id="si-band-lock-stat">0 / 0</div>
+            <div class="band-scan-kpi-meta" id="si-band-lock-meta">Nog geen scan gestart.</div>
+          </div>
+          <div class="band-scan-kpi">
+            <div class="band-scan-kpi-label">Voortgang</div>
+            <div class="band-scan-kpi-value" id="si-band-progress-stat">0%</div>
+            <div class="band-scan-kpi-meta" id="si-band-progress-meta">0 van 0 gemeten</div>
+          </div>
+          <div class="band-scan-kpi">
+            <div class="band-scan-kpi-label">Huidige Transponder</div>
+            <div class="band-scan-kpi-value band-scan-kpi-value-sm" id="si-band-current-stat">—</div>
+            <div class="band-scan-kpi-meta" id="si-band-current-meta">Wacht op start</div>
+          </div>
+        </div>
+
+        <div class="progress-bar band-scan-progress"><div class="progress-fill" id="si-band-prog-fill" style="width:0%"></div></div>
+        <div class="band-scan-statusline">
+          <div id="si-band-prog-label" class="text-sm text-muted">Nog geen scan gestart.</div>
+          <div id="si-band-scan-summary" class="text-sm text-strong"></div>
+        </div>
+
+        <div class="table-wrap band-scan-table-wrap">
+          <table class="band-scan-table">
+            <thead><tr><th>Transponder</th><th>Niveau</th><th>Qual.</th><th>Lock</th><th>Status</th></tr></thead>
+            <tbody id="si-band-scan-body"><tr><td colspan="5" class="text-muted">Nog geen scan gestart</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="grid-2">
         <div>
           <div class="card">
@@ -182,7 +538,7 @@
             <div class="row">
               <div class="form-group">
                 <label>SAT-IP Host</label>
-                <input type="text" id="si-host" placeholder="192.168.1.100" />
+                <input type="text" id="si-host" placeholder="192.168.x.x" />
               </div>
               <div class="form-group" style="max-width:90px">
                 <label>Poort</label>
@@ -190,7 +546,10 @@
               </div>
             </div>
             <div class="mt-1 flex gap-1 flex-wrap">
-              <button class="btn btn-secondary btn-sm" onclick="discoverSatip()">🔍 Ontdek</button>
+              <button class="btn btn-secondary btn-sm" onclick="discoverSatip()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Ontdek
+              </button>
             </div>
             <div id="si-discover-result" class="mt-1 text-sm text-muted"></div>
           </div>
@@ -233,9 +592,18 @@
               </div>
             </div>
             <div class="mt-1 flex gap-1 flex-wrap items-center">
-              <button class="btn btn-primary" id="btn-measure" onclick="measureSignal()">📶 Meten</button>
-              <button class="btn btn-success" id="btn-live-start" onclick="startLiveSession()">▶ Live peaken</button>
-              <button class="btn btn-danger" id="btn-live-stop" onclick="stopLiveSession()" style="display:none">⏹ Stoppen</button>
+              <button class="btn btn-primary" id="btn-measure" onclick="measureSignal()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                Meten
+              </button>
+              <button class="btn btn-success" id="btn-live-start" onclick="startLiveSession()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Live peaken
+              </button>
+              <button class="btn btn-danger" id="btn-live-stop" onclick="stopLiveSession()" style="display:none">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                Stoppen
+              </button>
               <label class="toggle-wrap text-sm">
                 <span class="toggle"><input type="checkbox" id="si-audio-enabled" /><span class="toggle-slider"></span></span>
                 Audiofeedback
@@ -244,27 +612,34 @@
           </div>
         </div>
 
-        <div>
-          <div class="card">
+        <div class="band-scan-secondary">
+          <div class="card signal-status-card">
             <div class="card-title">Signaalstatus</div>
-            <div id="si-lock-wrap" class="mb-1" style="margin-bottom:.75rem">
-              <span class="lock-indicator unlocked" id="si-lock">🔓 Geen lock</span>
+            <div class="mb-1">
+              <span class="lock-indicator unlocked" id="si-lock">
+                <svg class="si-lock-closed" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <svg class="si-lock-open" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                <span id="si-lock-label">Geen lock</span>
+              </span>
             </div>
             <div class="meter-group">
               <div>
-                <div class="meter-label"><span>Signaalsterkte</span><span id="si-level-val">—</span></div>
+                <div class="meter-label"><span class="meter-name">Signaalsterkte</span><span class="meter-val" id="si-level-val">—</span></div>
                 <div class="meter-bar"><div class="meter-fill" id="si-level-bar" style="width:0%"></div></div>
               </div>
               <div>
-                <div class="meter-label"><span>Signaalqualiteit</span><span id="si-quality-val">—</span></div>
+                <div class="meter-label"><span class="meter-name">Signaalqualiteit</span><span class="meter-val" id="si-quality-val">—</span></div>
                 <div class="meter-bar"><div class="meter-fill" id="si-quality-bar" style="width:0%"></div></div>
               </div>
             </div>
-            <div id="si-timestamp" class="text-muted text-sm mt-1" style="margin-top:.75rem"></div>
+            <div id="si-timestamp" class="text-muted text-sm mt-1" style="margin-top:10px"></div>
           </div>
 
           <div class="card">
-            <div class="card-title">Recente metingen <span class="badge" id="si-history-count">0</span></div>
+            <div class="card-title">
+              Recente metingen
+              <span class="badge" id="si-history-count">0</span>
+            </div>
             <div class="table-wrap" style="max-height:260px;overflow-y:auto">
               <table>
                 <thead><tr><th>Tijd</th><th>Freq</th><th>Niveau</th><th>Qual.</th><th>Lock</th></tr></thead>
@@ -276,14 +651,14 @@
       </div>
     </div>
 
-    <!-- TAB 2: TVheadend -->
+    <!-- ── TAB 2: TVHEADEND ─────────────────────────── -->
     <div id="tab-tvh" class="tab-panel">
       <div class="card">
         <div class="card-title">TVheadend verbinding</div>
         <div class="row">
           <div class="form-group">
             <label>TVheadend URL</label>
-            <input type="url" id="tvh-url" placeholder="http://192.168.1.101:9981" />
+            <input type="url" id="tvh-url" placeholder="http://192.168.x.x:9981" />
           </div>
           <div class="form-group" style="max-width:140px">
             <label>Gebruikersnaam</label>
@@ -293,8 +668,11 @@
             <label>Wachtwoord</label>
             <input type="password" id="tvh-pass" placeholder="••••••" />
           </div>
-          <div class="form-group" style="max-width:120px; align-self:flex-end">
-            <button class="btn btn-secondary" onclick="tvhSaveAndTest()">💾 Opslaan & test</button>
+          <div class="form-group" style="max-width:130px; align-self:flex-end">
+            <button class="btn btn-secondary" onclick="tvhSaveAndTest()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Opslaan &amp; test
+            </button>
           </div>
         </div>
         <div id="tvh-status" class="text-sm text-muted"></div>
@@ -304,11 +682,14 @@
         <div class="card">
           <div class="card-title justify-between flex items-center">
             <span>Kanalenlijst</span>
-            <button class="btn btn-secondary btn-sm" onclick="loadTvhChannels()">🔄 Laden</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadTvhChannels()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+              Laden
+            </button>
           </div>
           <div class="table-wrap" style="max-height:360px;overflow-y:auto">
             <table>
-              <thead><tr><th>#</th><th>Naam</th><th>Actie</th></tr></thead>
+              <thead><tr><th>#</th><th>Naam</th><th>Status</th></tr></thead>
               <tbody id="tvh-channels-body"><tr><td colspan="3" class="text-muted">Klik op Laden</td></tr></tbody>
             </table>
           </div>
@@ -316,8 +697,11 @@
 
         <div class="card">
           <div class="card-title">Tuner-status vastleggen</div>
-          <p class="text-sm text-muted" style="margin-bottom:.75rem">Legt een snapshot vast van alle TVheadend tuner-ingangen die op dit moment actief zijn.</p>
-          <button class="btn btn-primary" id="btn-tvh-scan" onclick="startTvhScan()">📸 Status vastleggen</button>
+          <p class="text-sm text-muted" style="margin-bottom:12px">Legt een snapshot vast van alle TVheadend tuner-ingangen die op dit moment actief zijn.</p>
+          <button class="btn btn-primary" id="btn-tvh-scan" onclick="startTvhScan()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Status vastleggen
+          </button>
           <div id="tvh-scan-progress" style="display:none" class="mt-1">
             <div class="progress-bar"><div class="progress-fill" id="tvh-prog-fill" style="width:0%"></div></div>
             <div id="tvh-prog-label" class="text-sm text-muted mt-1"></div>
@@ -327,28 +711,36 @@
       </div>
 
       <div class="card">
-        <div class="card-title">Actieve tuner-ingangen</div>
+        <div class="card-title justify-between flex items-center">
+          <span>Actieve tuner-ingangen</span>
+          <button class="btn btn-secondary btn-sm" onclick="loadTvhInputs()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+            Vernieuwen
+          </button>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Input</th><th>Stream</th><th>Signaal %</th><th>SNR %</th><th>BER</th><th>UNC</th></tr></thead>
             <tbody id="tvh-inputs-body"><tr><td colspan="6" class="text-muted">Nog niet geladen</td></tr></tbody>
           </table>
         </div>
-        <button class="btn btn-secondary btn-sm mt-1" style="margin-top:.5rem" onclick="loadTvhInputs()">🔄 Vernieuwen</button>
       </div>
     </div>
 
-    <!-- TAB 3: History -->
+    <!-- ── TAB 3: GESCHIEDENIS ──────────────────────── -->
     <div id="tab-history" class="tab-panel">
       <div class="grid-2">
         <div class="card">
           <div class="card-title justify-between flex items-center">
             <span>Scan-geschiedenis</span>
-            <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Vernieuwen</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadHistory()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+              Vernieuwen
+            </button>
           </div>
           <div class="table-wrap" style="max-height:320px;overflow-y:auto">
             <table>
-              <thead><tr><th>ID</th><th>Type</th><th>Datum</th><th>Weer</th><th>Actie</th></tr></thead>
+              <thead><tr><th>ID</th><th>Type</th><th>Datum</th><th>Weer</th><th></th></tr></thead>
               <tbody id="history-body"><tr><td colspan="5" class="text-muted">Laden…</td></tr></tbody>
             </table>
           </div>
@@ -361,7 +753,7 @@
 
       <div class="card">
         <div class="card-title">Signaalverloop over tijd</div>
-        <div class="row" style="margin-bottom:1rem">
+        <div class="row" style="margin-bottom:12px">
           <div class="form-group" style="max-width:220px">
             <label>Frequentie (MHz)</label>
             <select id="chart-freq-select" onchange="loadChartData()"></select>
@@ -380,14 +772,14 @@
       </div>
     </div>
 
-    <!-- TAB 4: Settings -->
+    <!-- ── TAB 4: INSTELLINGEN ──────────────────────── -->
     <div id="tab-settings" class="tab-panel">
       <div class="grid-2">
         <div class="card">
           <div class="card-title">SAT-IP Server</div>
           <div class="form-group">
             <label>Host / IP-adres</label>
-            <input type="text" id="cfg-satip-host" placeholder="192.168.1.100" />
+            <input type="text" id="cfg-satip-host" placeholder="192.168.x.x" />
           </div>
           <div class="form-group">
             <label>RTSP Poort</label>
@@ -397,13 +789,19 @@
             <label>Tuner nummer</label>
             <input type="number" id="cfg-satip-tuner" value="1" min="1" />
           </div>
+          <div class="form-group">
+            <label>Standaard satelliet</label>
+            <select id="cfg-default-satellite">
+              <option value="">– Alle (geen voorkeur) –</option>
+            </select>
+          </div>
         </div>
 
         <div class="card">
           <div class="card-title">TVheadend</div>
           <div class="form-group">
             <label>URL</label>
-            <input type="url" id="cfg-tvh-url" placeholder="http://192.168.1.101:9981" />
+            <input type="url" id="cfg-tvh-url" placeholder="http://192.168.x.x:9981" />
           </div>
           <div class="form-group">
             <label>Gebruikersnaam</label>
@@ -445,20 +843,69 @@
           </div>
           <div id="scheduler-status-text" class="text-sm text-muted"></div>
         </div>
+
+        <div class="card">
+          <div class="card-title">
+            Transponderlijst (muxes)
+            <span class="badge" id="mux-count-badge">0</span>
+          </div>
+          <p class="text-sm text-muted">Beheer de transponders die beschikbaar zijn voor scans. Importeer uit TVheadend of voeg handmatig toe.</p>
+
+          <div class="flex gap-1 flex-wrap mt-1">
+            <button class="btn btn-primary btn-sm" id="btn-import-tvh" onclick="importMuxesFromTvh()">Importeer uit TVheadend</button>
+            <button class="btn btn-danger btn-sm" onclick="clearAllMuxes()">Wis alles</button>
+          </div>
+          <div id="mux-import-msg" class="mt-1"></div>
+
+          <details class="mt-1">
+            <summary class="text-sm" style="cursor:pointer">Handmatig toevoegen</summary>
+            <div class="row mt-1">
+              <div class="form-group"><label>Satelliet</label><input type="text" id="mux-add-sat" placeholder="Astra 19.2°E" /></div>
+              <div class="form-group"><label>Frequentie</label><input type="number" id="mux-add-freq" placeholder="11229" /></div>
+              <div class="form-group"><label>Polarisatie</label>
+                <select id="mux-add-pol"><option value="H">H</option><option value="V">V</option><option value="L">L</option><option value="R">R</option></select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="form-group"><label>Symbol rate</label><input type="number" id="mux-add-sr" value="27500" /></div>
+              <div class="form-group"><label>Systeem</label>
+                <select id="mux-add-msys"><option value="DVBS2">DVB-S2</option><option value="DVBS">DVB-S</option></select>
+              </div>
+              <div class="form-group"><label>FEC</label><input type="text" id="mux-add-fec" value="3/4" /></div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="addMuxManually()">Toevoegen</button>
+          </details>
+
+          <div class="table-wrap mt-1" style="max-height:300px;overflow-y:auto">
+            <table>
+              <thead><tr><th>Satelliet</th><th>Frequentie</th><th>Pol</th><th>SR</th><th>Bron</th><th></th></tr></thead>
+              <tbody id="mux-list-body"><tr><td colspan="6" class="text-muted">Laden...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div class="flex gap-1 flex-wrap">
-        <button class="btn btn-primary" onclick="saveSettings()">💾 Opslaan</button>
-        <button class="btn btn-secondary" onclick="loadSettings()">↩ Herladen</button>
-        <button class="btn btn-secondary" onclick="triggerScheduledScan()">▶ Scan nu uitvoeren</button>
+        <button class="btn btn-primary" onclick="saveSettings()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Opslaan
+        </button>
+        <button class="btn btn-secondary" onclick="loadSettings()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+          Herladen
+        </button>
+        <button class="btn btn-secondary" onclick="triggerScheduledScan()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Scan nu uitvoeren
+        </button>
       </div>
       <div id="settings-msg" class="mt-1"></div>
     </div>
+
   </main>
 </div>
 
 <div id="toast-container"></div>
-
 <script src="app.js"></script>
 </body>
 </html>

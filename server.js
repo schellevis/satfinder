@@ -13,6 +13,7 @@ const scheduler = require('./src/scheduler');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const EXAMPLE_CONFIG_PATH = path.join(__dirname, 'config.example.json');
+let bandScanRunning = false;
 
 // ---------- Config helpers ----------
 
@@ -37,6 +38,103 @@ function saveConfig(newConfig) {
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+function writeJsonLine(res, payload) {
+  if (res.writableEnded || res.destroyed) return;
+  res.write(`${JSON.stringify(payload)}\n`);
+}
+
+async function runSignalBandScan({ host, port, tuner, satellite, weatherConfig, scanType = 'band-scan' }, onProgress = async () => {}) {
+  const transponders = db.getAllMuxes(satellite || undefined);
+  if (!transponders.length) {
+    throw new Error('Geen transponders gevonden voor deze satelliet');
+  }
+
+  let weatherData = null;
+  try {
+    weatherData = await weather.getCurrentWeather(weatherConfig || {});
+  } catch {}
+
+  const scanId = db.startScan(scanType, weatherData);
+  const results = [];
+
+  try {
+    await onProgress({ type: 'start', scanId, satellite, total: transponders.length, weatherData });
+
+    for (let index = 0; index < transponders.length; index++) {
+      const transponder = transponders[index];
+      const measuredAt = new Date().toISOString();
+      let result;
+
+      try {
+        const signal = await satip.measureSignal(host, port, { ...transponder, tuner });
+        db.insertSignalMeasurement(scanId, {
+          satellite: transponder.satellite || null,
+          frequency: transponder.frequency,
+          polarisation: transponder.polarisation,
+          symbol_rate: transponder.symbol_rate,
+          delivery_system: transponder.delivery_system || 'DVBS2',
+          signal_level: signal.level,
+          signal_quality: signal.quality,
+          locked: signal.locked,
+          measured_at: measuredAt
+        });
+        result = {
+          ...transponder,
+          level: signal.level,
+          quality: signal.quality,
+          locked: signal.locked,
+          measured_at: measuredAt,
+          error: null
+        };
+      } catch (err) {
+        db.insertSignalMeasurement(scanId, {
+          satellite: transponder.satellite || null,
+          frequency: transponder.frequency,
+          polarisation: transponder.polarisation,
+          symbol_rate: transponder.symbol_rate,
+          delivery_system: transponder.delivery_system || 'DVBS2',
+          signal_level: null,
+          signal_quality: null,
+          locked: false,
+          measured_at: measuredAt
+        });
+        result = {
+          ...transponder,
+          level: null,
+          quality: null,
+          locked: false,
+          measured_at: measuredAt,
+          error: err.message
+        };
+      }
+
+      const progress = {
+        type: 'progress',
+        scanId,
+        satellite,
+        index: index + 1,
+        total: transponders.length,
+        ...result
+      };
+      results.push(progress);
+      await onProgress(progress);
+    }
+
+    db.finishScan(scanId);
+    return {
+      scanId,
+      weatherData,
+      results,
+      total: transponders.length,
+      lockedCount: results.filter(result => result.locked).length,
+      successCount: results.filter(result => !result.error).length
+    };
+  } catch (err) {
+    try { db.finishScan(scanId); } catch {}
+    throw err;
+  }
+}
 
 // ---------- Routes ----------
 
@@ -73,7 +171,14 @@ app.post('/api/config', (req, res) => {
 app.get('/api/satip/discover', async (req, res) => {
   try {
     const timeout = Math.min(Math.max(500, parseInt(req.query.timeout, 10) || 3000), 30000);
-    const servers = await satip.discover(timeout);
+    const [servers, probed] = await Promise.all([
+      satip.discover(timeout),
+      satip.probeHost(loadConfig()?.satip?.host, loadConfig()?.satip?.port || 554)
+    ]);
+    // Merge: add probed host if not already found via SSDP
+    if (probed && !servers.some(s => s.address === probed.address)) {
+      servers.unshift(probed);
+    }
     res.json({ servers });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -147,6 +252,55 @@ app.get('/api/satip/signal', async (req, res) => {
   }
 });
 
+app.get('/api/satip/band-scan', async (req, res) => {
+  try {
+    const cfg = loadConfig();
+    const satipCfg = cfg.satip || {};
+    const host = req.query.host || satipCfg.host;
+    const port = parseInt(req.query.port, 10) || satipCfg.port || 554;
+    const satellite = req.query.satellite || satipCfg.defaultSatellite || '';
+    if (!host) return res.status(400).json({ error: 'SAT-IP host not configured' });
+    if (bandScanRunning) return res.status(409).json({ error: 'Er draait al een band-scan' });
+
+    bandScanRunning = true;
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+    const result = await runSignalBandScan({
+      host,
+      port,
+      tuner: satipCfg.tuner || 1,
+      satellite,
+      weatherConfig: cfg.weather || {},
+      scanType: 'band-scan'
+    }, async (payload) => {
+      writeJsonLine(res, payload);
+    });
+
+    writeJsonLine(res, {
+      type: 'done',
+      scanId: result.scanId,
+      satellite,
+      total: result.total,
+      lockedCount: result.lockedCount,
+      successCount: result.successCount,
+      weatherData: result.weatherData
+    });
+    res.end();
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      writeJsonLine(res, { type: 'error', message: err.message });
+      res.end();
+    }
+  } finally {
+    bandScanRunning = false;
+  }
+});
+
 // SAT-IP live session: tune once, poll signal without full tune/teardown per sample
 app.post('/api/satip/tune-session', async (req, res) => {
   try {
@@ -203,11 +357,106 @@ app.delete('/api/satip/tune-session/:sessionId', async (req, res) => {
   }
 });
 
-// Frequencies
+// Muxes
+app.get('/api/muxes', (req, res) => {
+  const { satellite } = req.query;
+  const muxes = db.getAllMuxes(satellite || undefined);
+  const satellites = db.getMuxSatellites();
+  res.json({ muxes, satellites });
+});
+
+app.post('/api/muxes', (req, res) => {
+  const { satellite, frequency, polarisation, symbol_rate, delivery_system, fec } = req.body;
+  if (!satellite || !frequency || !polarisation) {
+    return res.status(400).json({ error: 'satellite, frequency en polarisation zijn verplicht' });
+  }
+  try {
+    const id = db.insertMux({ satellite, frequency, polarisation, symbol_rate, delivery_system, fec, source: 'manual' });
+    res.json({ id });
+  } catch (err) {
+    if (err.message.includes('UNIQUE constraint')) {
+      return res.status(409).json({ error: 'Deze frequentie/polarisatie combinatie bestaat al' });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/muxes/:id', (req, res) => {
+  const { satellite, frequency, polarisation, symbol_rate, delivery_system, fec } = req.body;
+  if (!satellite || !frequency || !polarisation) {
+    return res.status(400).json({ error: 'satellite, frequency en polarisation zijn verplicht' });
+  }
+  const changes = db.updateMux(parseInt(req.params.id, 10), { satellite, frequency, polarisation, symbol_rate, delivery_system, fec });
+  if (!changes) return res.status(404).json({ error: 'Mux niet gevonden' });
+  res.json({ ok: true });
+});
+
+app.delete('/api/muxes/all', (req, res) => {
+  const deleted = db.deleteAllMuxes();
+  res.json({ deleted });
+});
+
+app.delete('/api/muxes/:id', (req, res) => {
+  const changes = db.deleteMux(parseInt(req.params.id, 10));
+  if (!changes) return res.status(404).json({ error: 'Mux niet gevonden' });
+  res.json({ ok: true });
+});
+
+app.post('/api/muxes/import-tvheadend', async (req, res) => {
+  try {
+    const cfg = loadConfig();
+    const tvCfg = cfg.tvheadend || {};
+    if (!tvCfg.url) return res.status(400).json({ error: 'TVheadend URL niet geconfigureerd' });
+
+    const muxes = await tvheadend.getMuxes(tvCfg);
+    let imported = 0, updated = 0, skipped = 0;
+
+    for (const mux of muxes) {
+      if (!mux.frequency) { skipped++; continue; }
+      const result = db.upsertTvhMux({
+        satellite: mux.network || 'Onbekend',
+        frequency: mux.frequency,
+        polarisation: mapTvhPolarisation(mux.polarisation),
+        symbol_rate: mux.symbolrate || 27500,
+        delivery_system: mapTvhDeliverySystem(mux.modulation),
+        fec: mux.fec || '3/4',
+        tvh_uuid: mux.uuid
+      });
+      if (result === 'imported') imported++;
+      else if (result === 'updated') updated++;
+      else skipped++;
+    }
+
+    res.json({ imported, updated, skipped, total: muxes.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function mapTvhPolarisation(pol) {
+  if (!pol) return 'H';
+  const p = String(pol).toUpperCase();
+  if (p.startsWith('V') || p === 'VERTICAL') return 'V';
+  if (p.startsWith('H') || p === 'HORIZONTAL') return 'H';
+  if (p.startsWith('L') || p === 'CIRCULAR_LEFT') return 'L';
+  if (p.startsWith('R') || p === 'CIRCULAR_RIGHT') return 'R';
+  return p.charAt(0) || 'H';
+}
+
+function mapTvhDeliverySystem(modulation) {
+  if (!modulation) return 'DVBS2';
+  const m = String(modulation).toUpperCase();
+  if (m.includes('S2')) return 'DVBS2';
+  if (m.includes('DVB-S')) return 'DVBS';
+  return 'DVBS2';
+}
+
+// Frequencies (backward-compatible alias)
 app.get('/api/frequencies', (req, res) => {
   const { satellite } = req.query;
-  const data = satellite ? frequencies.getBySatellite(satellite) : frequencies.getAll();
-  res.json({ frequencies: data, satellites: frequencies.getSatellites() });
+  const muxes = db.getAllMuxes(satellite || undefined);
+  const satellites = db.getMuxSatellites();
+  res.json({ frequencies: muxes, satellites });
 });
 
 // TVheadend
@@ -365,6 +614,10 @@ function deepMerge(target, source) {
 const cfg = loadConfig();
 const PORT = process.env.PORT || (cfg.server && cfg.server.port) || 3000;
 const HOST = process.env.HOST || (cfg.server && cfg.server.host) || '0.0.0.0';
+
+// Seed muxes table from static list on first startup
+const seeded = db.seedMuxes(frequencies.getAll());
+if (seeded) console.log(`Seeded ${seeded} transponders into muxes table`);
 
 app.listen(PORT, HOST, () => {
   console.log(`Satfinder running at http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);

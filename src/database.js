@@ -62,6 +62,20 @@ function migrate(db) {
       measured_at DATETIME NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS muxes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      satellite TEXT NOT NULL,
+      frequency INTEGER NOT NULL,
+      polarisation TEXT NOT NULL,
+      symbol_rate INTEGER NOT NULL DEFAULT 27500,
+      delivery_system TEXT NOT NULL DEFAULT 'DVBS2',
+      fec TEXT DEFAULT '3/4',
+      source TEXT NOT NULL DEFAULT 'manual',
+      tvh_uuid TEXT,
+      created_at DATETIME NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_muxes_freq_pol ON muxes(frequency, polarisation);
     CREATE INDEX IF NOT EXISTS idx_signal_measurements_scan_id ON signal_measurements(scan_id);
     CREATE INDEX IF NOT EXISTS idx_channel_measurements_scan_id ON channel_measurements(scan_id);
     CREATE INDEX IF NOT EXISTS idx_scans_started_at ON scans(started_at);
@@ -186,6 +200,111 @@ function getSignalWeatherCorrelation(limit = 100) {
   `).all(limit);
 }
 
+// ─── Muxes ──────────────────────────────────────────────────────────────────
+
+function getAllMuxes(satellite) {
+  const db = getDb();
+  if (satellite) {
+    return db.prepare('SELECT * FROM muxes WHERE satellite = ? ORDER BY frequency, polarisation').all(satellite);
+  }
+  return db.prepare('SELECT * FROM muxes ORDER BY satellite, frequency, polarisation').all();
+}
+
+function getMuxSatellites() {
+  const db = getDb();
+  return db.prepare('SELECT DISTINCT satellite FROM muxes ORDER BY satellite').all().map(r => r.satellite);
+}
+
+function insertMux(data) {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO muxes (satellite, frequency, polarisation, symbol_rate, delivery_system, fec, source, tvh_uuid, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  return stmt.run(
+    data.satellite,
+    data.frequency,
+    data.polarisation,
+    data.symbol_rate || 27500,
+    data.delivery_system || 'DVBS2',
+    data.fec || '3/4',
+    data.source || 'manual',
+    data.tvh_uuid || null,
+    new Date().toISOString()
+  ).lastInsertRowid;
+}
+
+function updateMux(id, data) {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE muxes SET satellite = ?, frequency = ?, polarisation = ?, symbol_rate = ?,
+      delivery_system = ?, fec = ? WHERE id = ?
+  `);
+  return stmt.run(data.satellite, data.frequency, data.polarisation,
+    data.symbol_rate, data.delivery_system, data.fec, id).changes;
+}
+
+function deleteMux(id) {
+  const db = getDb();
+  return db.prepare('DELETE FROM muxes WHERE id = ?').run(id).changes;
+}
+
+function deleteAllMuxes() {
+  const db = getDb();
+  return db.prepare('DELETE FROM muxes').run().changes;
+}
+
+function upsertTvhMux(data) {
+  const db = getDb();
+  const existing = data.tvh_uuid
+    ? db.prepare('SELECT id FROM muxes WHERE tvh_uuid = ?').get(data.tvh_uuid)
+    : null;
+  if (existing) {
+    db.prepare(`
+      UPDATE muxes SET satellite = ?, frequency = ?, polarisation = ?, symbol_rate = ?,
+        delivery_system = ?, fec = ?, source = 'tvheadend' WHERE id = ?
+    `).run(data.satellite, data.frequency, data.polarisation,
+      data.symbol_rate, data.delivery_system, data.fec, existing.id);
+    return 'updated';
+  }
+  try {
+    insertMux({ ...data, source: 'tvheadend' });
+    return 'imported';
+  } catch (err) {
+    if (err.message.includes('UNIQUE constraint')) return 'skipped';
+    throw err;
+  }
+}
+
+function muxCount() {
+  const db = getDb();
+  return db.prepare('SELECT COUNT(*) AS count FROM muxes').get().count;
+}
+
+/**
+ * Seed the muxes table from the static frequencies.js list.
+ * Only called when the table is empty (first startup).
+ */
+function seedMuxes(transponders) {
+  const db = getDb();
+  if (muxCount() > 0) return 0;
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO muxes (satellite, frequency, polarisation, symbol_rate, delivery_system, fec, source, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'seed', ?)
+  `);
+  const now = new Date().toISOString();
+  const insert = db.transaction((list) => {
+    let count = 0;
+    for (const t of list) {
+      const result = stmt.run(t.satellite, t.frequency, t.polarisation,
+        t.symbol_rate || 27500, t.delivery_system || 'DVBS2', t.fec || '3/4', now);
+      if (result.changes) count++;
+    }
+    return count;
+  });
+  return insert(transponders);
+}
+
 function close() {
   if (db) {
     db.close();
@@ -204,5 +323,14 @@ module.exports = {
   getSignalHistory,
   getFrequenciesWithData,
   getSignalWeatherCorrelation,
+  getAllMuxes,
+  getMuxSatellites,
+  insertMux,
+  updateMux,
+  deleteMux,
+  deleteAllMuxes,
+  upsertTvhMux,
+  muxCount,
+  seedMuxes,
   close
 };

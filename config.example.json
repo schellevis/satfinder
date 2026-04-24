@@ -6,7 +6,8 @@
   "satip": {
     "host": "192.168.1.100",
     "port": 554,
-    "tuner": 1
+    "tuner": 1,
+    "defaultSatellite": ""
   },
   "tvheadend": {
     "url": "http://192.168.1.101:9981",
