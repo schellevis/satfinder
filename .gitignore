@@ -1,6 +1,11 @@
+.superpowers/*
+.claude/*
 node_modules/
 config.json
 *.db
 *.log
 .env
-data/
+data/*
+docs/*
+*.db-wal
+*.db-shm 
